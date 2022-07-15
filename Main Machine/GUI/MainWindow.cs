@@ -26,8 +26,9 @@ namespace NewGear.MainMachine.GUI {
             ImGui.GetStyle().Colors[(int) ImGuiCol.DockingEmptyBg] = IMGUI_DOCKSPACE_BACKGROUND;
 
             // Default windows (will be replaced with configuration file later)
-            OpenedWindows[0] = true;
-            OpenedWindows[2] = true;
+            OpenedWindows[0] = true;  // File Tree
+            OpenedWindows[1] = false; // Viewport
+            OpenedWindows[2] = false; // Hex Editor
 
             abortExit: // Label used for when the files have not been closed properly. (Not saved)
             while(!Raylib.WindowShouldClose()) {

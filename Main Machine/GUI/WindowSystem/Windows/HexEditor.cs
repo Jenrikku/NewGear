@@ -30,7 +30,7 @@ namespace NewGear.MainMachine.GUI.WindowSystem.Windows {
         public byte[] AddrInput = new byte[32];
 
         public unsafe void Render() {
-            ImGui.SetNextWindowSize(new Vector2(500, 350), ImGuiCond.FirstUseEver);
+            ImGui.SetNextWindowSize(new(500, 350), ImGuiCond.FirstUseEver);
             if(!ImGui.Begin("Hex Editor")) {
                 ImGui.End();
                 return;

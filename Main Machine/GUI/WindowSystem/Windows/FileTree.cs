@@ -24,6 +24,7 @@ namespace NewGear.MainMachine.GUI.WindowSystem.Windows {
         }
 
         public void Render() {
+            ImGui.SetNextWindowSize(new(500, 350), ImGuiCond.FirstUseEver);
             ImGui.Begin("File Tree", ref MainWindow.OpenedWindows[0]);
             WindowPositionMin = ImGui.GetWindowPos();
             WindowPositionMax = WindowPositionMin + ImGui.GetWindowSize();

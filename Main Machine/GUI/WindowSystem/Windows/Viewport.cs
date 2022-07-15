@@ -22,6 +22,7 @@ namespace NewGear.MainMachine.GUI.WindowSystem.Windows {
 
             // Update:
 
+            ImGui.SetNextWindowSize(new(500, 350), ImGuiCond.FirstUseEver);
             ImGui.Begin("Viewport", ref OpenedWindows[1]);
             WindowPositionMin = ImGui.GetWindowPos();
             WindowPositionMax = WindowPositionMin + ImGui.GetWindowSize();
