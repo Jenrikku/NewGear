@@ -41,10 +41,17 @@ namespace NewGear.Gears.Containers {
 
             reader.Position += 4; // Length skip (calculated when writing).
 
-            Debug.Assert(reader.ReadUInt16() == 16); // Header length check.
-            Debug.Assert(reader.ReadUInt16() == 3);  // Entry count check.
+            {
+                bool headerCheck = reader.ReadUInt16() == 16;
+                bool entryCountCheck = reader.ReadUInt16() == 3;
 
-            Debug.Assert(reader.ReadString(4) == "BTAF"); // BFAT magic check.
+                Debug.Assert(headerCheck);     // Header length check.
+                Debug.Assert(entryCountCheck); // Entry count check.
+
+                bool bfatMagicCheck = reader.ReadString(4) == "BTAF";
+
+                Debug.Assert(bfatMagicCheck); // BFAT magic check.
+            }
 
             // The positions where the sections' reading was left last time.
             long bfatIndex = reader.Position + 8;
@@ -58,13 +65,20 @@ namespace NewGear.Gears.Containers {
 
             #region BFNT preparations
             reader.Position = bfntIndex;
-            Debug.Assert(reader.ReadString(4) == "BTNF"); // BFNT magic check.
+
+            {
+                bool bfntMagicCheck = reader.ReadString(4) == "BTNF";
+                Debug.Assert(bfntMagicCheck); // BFNT magic check.
+            }
 
             fimgIndex = reader.Position + reader.ReadUInt32() - 4; // Sets FIMG section begining.
 
             using(reader.TemporarySeek()) {
                 reader.Position = fimgIndex;
-                Debug.Assert(reader.ReadString(4) == "GMIF"); // FIMG magic check.
+
+                bool fimgMagicCheck = reader.ReadString(4) == "GMIF";
+
+                Debug.Assert(fimgMagicCheck); // FIMG magic check.
                 fimgIndex += 8; // Skips magic and length.
             }
 
