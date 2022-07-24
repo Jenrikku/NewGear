@@ -31,7 +31,7 @@ namespace NewGear.MainMachine.GUI.WindowSystem.Windows {
 
         public unsafe void Render() {
             ImGui.SetNextWindowSize(new(500, 350), ImGuiCond.FirstUseEver);
-            if(!ImGui.Begin("Hex Editor")) {
+            if(!ImGui.Begin("Hex Editor", ImGuiWindowFlags.NoScrollbar)) {
                 ImGui.End();
                 return;
             }
