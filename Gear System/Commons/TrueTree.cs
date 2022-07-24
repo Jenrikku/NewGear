@@ -1,16 +1,35 @@
 ﻿using System.Collections;
 
 namespace NewGear.TrueTree {
-    public class Node : IEnumerable<Node> {
+    public interface INode {
         /// <summary>
-        /// Returns the first occurrence of a child with the same name.
+        /// The ID of the node.
         /// </summary>
-        /// <param name="name">The child's name.</param>
+        public dynamic ID { get; set; }
+        /// <summary>
+        /// The contents of this node, used to store various data.
+        /// </summary>
+        public dynamic? Contents { get; set; }
+        /// <summary>
+        /// Returns the parent node.
+        /// </summary>
+        public BranchNode? Parent { get; internal set; }
+    }
+
+    public class BranchNode : INode, IEnumerable<INode> {
+        public BranchNode(dynamic id) {
+            ID = id;
+        }
+
+        /// <summary>
+        /// Returns the first occurrence of a child with the same ID.
+        /// </summary>
+        /// <param name="id">The child's ID.</param>
         /// <returns></returns>
-        public Node? this[string name] {
+        public INode? this[dynamic id] {
             get {
-                foreach(Node node in Children)
-                    if(node.Name == name)
+                foreach(INode node in Children)
+                    if(node.ID == id)
                         return node;
                 return null;
             }
@@ -21,43 +40,43 @@ namespace NewGear.TrueTree {
         /// </summary>
         /// <param name="index">The index of the node.</param>
         /// <returns></returns>
-        public Node this[int index] {
+        public INode this[int index] {
             get => Children[index];
         }
 
-        public Node(string name) {
-            Name = name;
-        }
-
-        /// <summary>
-        /// The name of the node.
-        /// </summary>
-        public string Name { get; set; }
-        /// <summary>
-        /// This list is intended to be used to store the node's data.
-        /// </summary>
-        public List<dynamic> Contents { get; set; } = new();
-        /// <summary>
-        /// Returns the parent node.
-        /// </summary>
-        public Node? Parent { get; internal set; }
         /// <summary>
         /// Checks whether or not this node has children.
         /// </summary>
         public bool HasChildren { get => Children.Count > 0; }
 
-        internal List<Node> Children = new();
+        internal List<INode> Children = new();
 
         /// <summary>
-        /// Adds a node as a child to another one and returns the child node.
+        /// Adds a node as a child to another one and returns this child node.
         /// </summary>
-        public Node AddChild(Node child) {
+        public INode AddChild(INode child) {
             child.Parent = this;
             Children.Add(child);
             return child;
         }
 
-        public IEnumerator<Node> GetEnumerator() => Children.GetEnumerator();
+        // Interface implementation.
+        public IEnumerator<INode> GetEnumerator() => Children.GetEnumerator();
         IEnumerator IEnumerable.GetEnumerator() => Children.GetEnumerator();
+
+        public dynamic ID { get; set; }
+        public dynamic? Contents { get; set; }
+        public BranchNode? Parent { get; set; }
+    }
+
+    public class LeafNode : INode {
+        public LeafNode(dynamic id) {
+            ID = id;
+        }
+
+        // Interface implementation.
+        public dynamic ID { get; set; }
+        public dynamic? Contents { get; set; }
+        public BranchNode? Parent { get; set; }
     }
 }

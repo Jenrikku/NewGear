@@ -7,7 +7,7 @@ using TinyDialogsNet;
 
 namespace NewGear.MainMachine.GUI.WindowSystem.Windows {
     internal class FileTree : ImGUIWindow {
-        private static Node? RootNode;
+        private static BranchNode? RootNode;
 
         public Vector2 WindowPositionMin { get; set; }
         public Vector2 WindowPositionMax { get; set; }
@@ -36,35 +36,33 @@ namespace NewGear.MainMachine.GUI.WindowSystem.Windows {
 
             RenderChildren(RootNode);
 
-            void RenderChildren(Node parent) {
-                foreach(Node child in parent) {
-                    if(child.HasChildren) {
-                        if(ImGui.TreeNodeEx(child.Name)) {
-                            RenderChildren(child);
+            void RenderChildren(BranchNode parent) {
+                foreach(INode child in parent) {
+                    if(child is BranchNode) {
+                        if(ImGui.TreeNodeEx(child.ID)) {
+                            RenderChildren((BranchNode) child);
                             ImGui.TreePop();
                         }
                     } else {
-                        if(ImGui.Selectable(child.Name) && !(FileManager.CurrentFile is null)) {
-                            // [!] This is hard-coded and should not be left like this.
-                            FileManager.CurrentFile.CurrentSubFile = child.Contents[1];
-                        }
+                        // When file is selected
+                        if(ImGui.Selectable(child.ID))
+                            if(!(FileManager.CurrentFile is null))
+                                FileManager.CurrentFile.CurrentSubFile = child.Contents;
 
                         // Context Menu
                         if(ImGui.BeginPopupContextItem()) {
                             if(ImGui.Selectable("Export")) {
-                                string? result = Dialogs.SaveFileDialog(filter: "*" + Path.GetExtension(child.Name));
+                                string? result = Dialogs.SaveFileDialog(filter: "*" + Path.GetExtension(child.ID));
 
-                                // [!] This is hard-coded and should not be left like this.
                                 if(result != null)
-                                    File.WriteAllBytes(result, (byte[]) child.Contents[1]);
+                                    File.WriteAllBytes(result, (byte[]) (child.Contents ?? new byte[0]));
                             }
 
                             if(ImGui.Selectable("Replace")) {
                                 string? result = Dialogs.OpenFileDialog()?.First();
 
-                                // [!] This is hard-coded and should not be left like this.
                                 if(result != null) {
-                                    child.Contents[1] = File.ReadAllBytes(result);
+                                    child.Contents = File.ReadAllBytes(result);
 
                                     if(!(FileManager.CurrentFile is null))
                                         FileManager.CurrentFile.Saved = false;

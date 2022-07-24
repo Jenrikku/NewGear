@@ -1,4 +1,5 @@
-﻿using NewGear.GearSystem.AbstractGears;
+﻿using NewGear.GearSystem;
+using NewGear.GearSystem.AbstractGears;
 using NewGear.TrueTree;
 using Syroot.BinaryData;
 using System.Diagnostics;
@@ -8,8 +9,8 @@ using System.Text;
 namespace NewGear.Gears.Containers {
     public class NARC : ContainerGear {
         public NARC() {
-            // Initialize (extra code specific to gear)
-            Header = new NARCHeader() {
+            // Initialize
+            RootNode.Contents = new NARCHeader() {
                 Version = 0x0100,
                 bfntUnknown = new byte[] {
                     0x00, 0x00, 0x01, 0x00
@@ -33,11 +34,11 @@ namespace NewGear.Gears.Containers {
             ByteOrder = (ByteOrder) reader.ReadUInt16();
             reader.ByteOrder = ByteOrder;
 
-            // NullPointer prevention.
-            if(Header is null)
-                Header = new NARCHeader();
+            // Prevention of outside modifications.
+            if(!(RootNode.Contents is NARCHeader))
+                RootNode.Contents = new NARCHeader();
 
-            Header.Version = reader.ReadUInt16();
+            RootNode.Contents.Version = reader.ReadUInt16();
 
             reader.Position += 4; // Length skip (calculated when writing).
 
@@ -84,12 +85,12 @@ namespace NewGear.Gears.Containers {
 
             uint bfntUnknownLength = reader.ReadUInt32() - 4;
 
-            Header.bfntUnknown = new byte[bfntUnknownLength];
+            RootNode.Contents.bfntUnknown = new byte[bfntUnknownLength];
             for(int i = 0; i < bfntUnknownLength; i++)
-                Header.bfntUnknown[i] = reader.ReadByte();
+                RootNode.Contents.bfntUnknown[i] = reader.ReadByte();
             #endregion
 
-            Node currentFolder = RootNode;
+            BranchNode currentFolder = RootNode;
             for(int i = 0; i < fileCount; i++) {
                 byte nameLength = reader.ReadByte();
 
@@ -100,10 +101,9 @@ namespace NewGear.Gears.Containers {
                 }
 
                 if(nameLength >= 0x80) { // If it is a "folder".
-                    Node childFolder = new(reader.ReadString(nameLength & 0x7F));
-                    childFolder.Contents.Add(true); // It is a "folder". (Contents[0] == true)
+                    BranchNode childFolder = new(reader.ReadString(nameLength & 0x7F));
 
-                    currentFolder = currentFolder.AddChild(childFolder);
+                    currentFolder = (BranchNode) currentFolder.AddChild(childFolder);
 
                     reader.Position += 2;
                     i--;
@@ -120,13 +120,12 @@ namespace NewGear.Gears.Containers {
                     bfatIndex = reader.Position;
                 }
 
-                Node child = new(reader.ReadString(nameLength));
-                child.Contents.Add(false); // It is a file. (Contents[0] == false)
+                LeafNode child = new(reader.ReadString(nameLength));
 
                 // Decompress FIMG section:
                 using(reader.TemporarySeek()) {
                     reader.Position = fimgIndex + currentFileOffset;
-                    child.Contents.Add(reader.ReadBytes((int) (currentFileEnd - currentFileOffset)));
+                    child.Contents = reader.ReadBytes((int) (currentFileEnd - currentFileOffset));
                 }
 
                 currentFolder.AddChild(child);
@@ -142,7 +141,7 @@ namespace NewGear.Gears.Containers {
             writer.Write("NARC",
                 BinaryStringFormat.NoPrefixOrTermination); // Magic string.
             writer.Write((ushort) 0xFFFE);                 // Byte order.
-            writer.Write(Header?.Version);                 // Version.
+            writer.Write(RootNode.Contents?.Version);      // Version.
             writer.Position += 4;                          // Length skip. (calculated later)
             writer.Write((ushort) 0x10);                   // Header length.
             writer.Write((ushort) 0x03);                   // Section count.
@@ -169,9 +168,9 @@ namespace NewGear.Gears.Containers {
 
             long bfntLengthIndex = writer.Position; // For calculation the position later.
 
-            writer.Position += 4;                         // Length skip. (calculated later)
-            writer.Write(Header?.bfntUnknown.Length + 4); // Header length.
-            writer.Write(Header?.bfntUnknown);            // Header data.
+            writer.Position += 4;                                    // Length skip. (calculated later)
+            writer.Write(RootNode.Contents?.bfntUnknown.Length + 4); // Header length.
+            writer.Write(RootNode.Contents?.bfntUnknown);            // Header data.
 
             byte folderCount = 1;
             WriteBFNTEntry(RootNode); // Write all BFNT entries recursively.
@@ -221,27 +220,27 @@ namespace NewGear.Gears.Containers {
             #endregion
 
 
-            void FolderIterate(Node folderNode) {
-                foreach(Node node in folderNode) {
-                    if(node.Contents[0] == true) // If it is a "folder" then iterate through it.
-                        FolderIterate(node);
-                    else                         // If it is a file then add its content to the list.
-                        fileContainer.Add(node.Contents[1]);
+            void FolderIterate(BranchNode branchNode) {
+                foreach(INode node in branchNode) {
+                    if(node is BranchNode) // If it is a "folder" then iterate through it.
+                        FolderIterate((BranchNode) node);
+                    else                   // If it is a file then add its content to the list.
+                        fileContainer.Add(node.Contents);
                 }
             }
 
-            void WriteBFNTEntry(Node entry) {
-                foreach(Node node in entry) {
-                    if(node.Contents[0] == true) { // If it is a "folder".
-                        writer.Write((byte) (node.Name.Length + 0x80)); // Name's length.
-                        writer.Write(node.Name,
-                            BinaryStringFormat.NoPrefixOrTermination);  // Name.
-                        writer.Write(folderCount++);                    // Folder id. (count)
-                        writer.Write((byte) 0xF0);                      // Constant.
+            void WriteBFNTEntry(BranchNode entry) {
+                foreach(INode node in entry) {
+                    if(node is BranchNode) { // If it is a "folder".
+                        writer.Write((byte) (node.ID.Length + 0x80));  // ID's length.
+                        writer.Write(node.ID,
+                            BinaryStringFormat.NoPrefixOrTermination); // ID.
+                        writer.Write(folderCount++);                   // Folder id. (count)
+                        writer.Write((byte) 0xF0);                     // Constant.
 
-                        WriteBFNTEntry(node);
+                        WriteBFNTEntry((BranchNode) node);
                     } else {
-                        writer.Write(node.Name); // File name.
+                        writer.Write(node.ID); // File name.
                     }
                 }
 
