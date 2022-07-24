@@ -18,6 +18,9 @@ namespace NewGear.MainMachine.GUI {
                         FileManager.OpenFiles(files.ToArray());
                 }
 
+                if(FileManager.CurrentFile is null)
+                    ImGui.BeginDisabled();
+
                 if(ImGui.MenuItem("Save", "Ctrl+S")) {
                     if(FileManager.CurrentFile is null)
                         return false;
@@ -46,6 +49,8 @@ namespace NewGear.MainMachine.GUI {
                 if(ImGui.MenuItem("Close File")) {
                     FileManager.CloseCurrentFile();
                 }
+
+                ImGui.EndDisabled(); // Only executed if no file is loaded.
 
                 ImGui.Separator();
 
