@@ -1,6 +1,6 @@
-﻿using NewGear.Gears.Compression;
-using NewGear.Gears.Containers;
+﻿using NewGear.GearSystem;
 using NewGear.GearSystem.AbstractGears;
+using System.Reflection;
 using TinyDialogsNet;
 
 namespace NewGear.MainMachine.FileSystem {
@@ -39,33 +39,43 @@ namespace NewGear.MainMachine.FileSystem {
 
                 #region Compression
 
-                switch(buffer) {
-                    case byte[] x when Yaz0.Identify(x):
-                        Yaz0 yaz0 = new();
+                foreach(Type type in GearLoader.LoadedCompressionGears) {
+                    MethodInfo? identiyMethod = type.GetMethod("Identify");
 
-                        buffer = yaz0.Decompress(x);
-                        compressionAlgorithm = yaz0;
-                        break;
+                    if(identiyMethod is null)
+                        continue; // If it cannot be identified, it is skipped.
+
+                    bool? success = (bool?) identiyMethod.Invoke(null, new object[] { buffer });
+
+                    if(success.HasValue && success.Value) {
+                        compressionAlgorithm = (CompressionGear) type.GetConstructors()[0].Invoke(null);
+                        buffer = compressionAlgorithm.Decompress(buffer);
+                    }
                 }
 
                 #endregion
 
-                switch(buffer) {
+                #region Data
 
-                    #region Containers
+                foreach(Type type in GearLoader.LoadedDataGears) {
+                    MethodInfo? identiyMethod = type.GetMethod("Identify");
 
-                    case byte[] x when NARC.Identify(x):
-                        NARC narc = new() {
-                            CompressionAlgorithm = compressionAlgorithm
-                        };
+                    if(identiyMethod is null)
+                        continue; // If it cannot be identified, it is skipped.
 
-                        narc.Read(x);
-                        LoadedFiles.Add(new(filename, narc));
-                        continue;
+                    bool? success = (bool?) identiyMethod.Invoke(null, new object[] { buffer });
 
-                    #endregion
-                
+                    if(success.HasValue && success.Value) {
+                        DataGear gear = (DataGear) type.GetConstructors()[0].Invoke(null);
+                        gear.CompressionAlgorithm = compressionAlgorithm;
+
+                        gear.Read(buffer);
+                        LoadedFiles.Add(new(filename, gear));
+                        goto nextFile;
+                    }
                 }
+
+                #endregion
 
                 // File not recognized.
                 Dialogs.MessageBox(
@@ -74,6 +84,9 @@ namespace NewGear.MainMachine.FileSystem {
                     Dialogs.MessageBoxDefaultButton.OkYes,
                     filename,
                     "The file cannot be opened by any of the available libraries.");
+
+                nextFile:
+                    continue;
             }
 
             // Switch the current file to the newest:
