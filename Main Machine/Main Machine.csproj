@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -7,6 +7,12 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Version>0.0.1</Version>
+    <RunPostBuildEvent>OnBuildSuccess</RunPostBuildEvent>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <BuildDirectory>$(MSBuildThisFileDirectory)bin\$(Configuration)\$(TargetFramework)</BuildDirectory>
   </PropertyGroup>
 
   <ItemGroup>
@@ -20,5 +26,14 @@
     <ProjectReference Include="..\Gears\NARC\NARC.csproj" />
     <ProjectReference Include="..\Gears\Yaz0\Yaz0.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <Gears Include="$(BuildDirectory)\NARC.dll"/>
+    <Gears Include="$(BuildDirectory)\Yaz0.dll"/>
+  </ItemGroup>
+
+  <Target Name="MoveGears" AfterTargets="Build">
+    <Move SourceFiles="@(Gears)" DestinationFolder="$(BuildDirectory)\Gears\"/>
+  </Target>
 
 </Project>
