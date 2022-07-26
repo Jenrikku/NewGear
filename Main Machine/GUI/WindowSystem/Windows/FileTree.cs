@@ -52,7 +52,10 @@ namespace NewGear.MainMachine.GUI.WindowSystem.Windows {
                         // Context Menu
                         if(ImGui.BeginPopupContextItem()) {
                             if(ImGui.Selectable("Export")) {
-                                string? result = Dialogs.SaveFileDialog(filter: "*" + Path.GetExtension(child.ID));
+                                string? result = Dialogs.SaveFileDialog(
+                                    defaultPath: child.ID,
+                                    filter: "*" + Path.GetExtension(child.ID),
+                                    filterName: new string(Path.GetExtension(child.ID)).Substring(1).ToUpperInvariant() + " file");
 
                                 if(result != null)
                                     File.WriteAllBytes(result, (byte[]) (child.Contents ?? new byte[0]));
