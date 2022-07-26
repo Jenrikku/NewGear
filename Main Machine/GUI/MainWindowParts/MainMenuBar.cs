@@ -32,7 +32,10 @@ namespace NewGear.MainMachine.GUI {
                     if(FileManager.CurrentFile is null)
                         return false;
 
-                    string result = Dialogs.SaveFileDialog(filter: "*" + Path.GetExtension(FileManager.CurrentFile.FullName));
+                    string result = Dialogs.SaveFileDialog(
+                        defaultPath: FileManager.CurrentFile.FullName,
+                        filter: "*" + Path.GetExtension(FileManager.CurrentFile.FullName),
+                        filterName: new string(Path.GetExtension(FileManager.CurrentFile.FullName)).Substring(1).ToUpperInvariant() + " file");
 
                     if(!(result is null)) {
                         byte[] buffer = FileManager.CurrentFile.Gear.Write();
