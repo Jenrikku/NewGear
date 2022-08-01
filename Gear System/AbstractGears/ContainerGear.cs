@@ -5,6 +5,6 @@ namespace NewGear.GearSystem.AbstractGears {
         /// <summary>
         /// Contains all the files inside the archive. It can be iterated.
         /// </summary>
-        public Node RootNode = new("root");
+        public BranchNode RootNode = new("root");
     }
 }

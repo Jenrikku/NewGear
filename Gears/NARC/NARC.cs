@@ -1,5 +1,4 @@
-﻿using NewGear.GearSystem;
-using NewGear.GearSystem.AbstractGears;
+﻿using NewGear.GearSystem.AbstractGears;
 using NewGear.TrueTree;
 using Syroot.BinaryData;
 using System.Diagnostics;

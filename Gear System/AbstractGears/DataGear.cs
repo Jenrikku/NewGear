@@ -11,7 +11,6 @@ namespace NewGear.GearSystem.AbstractGears {
         /// The ByteOrder or endianess of the file, it depends on the platform it is for.
         /// </summary>
         public ByteOrder ByteOrder { get; set; } = ByteOrder.LittleEndian;
-        public dynamic? Header;
 
         #region Reading
 

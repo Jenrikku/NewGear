@@ -4,8 +4,8 @@ using System.Collections;
 using System.Runtime.InteropServices;
 using System.Text;
 
-// Code based of Hack.IO (https://github.com/SuperHackio/Hack.io/blob/master/Hack.io.Yaz0/Yaz0.cs)
-// and EveryFileExplorer (https://github.com/Gericom/EveryFileExplorer/blob/master/CommonCompressors/Yaz0.cs)
+// Code based of Hack.IO (https://github.com/SuperHackio/Hack.io/blob/master/Hack.io.YAZ0/YAZ0.cs)
+// and EveryFileExplorer (https://github.com/Gericom/EveryFileExplorer/blob/master/CommonCompressors/YAZ0.cs)
 namespace NewGear.Gears.Compression {
     public class Yaz0 : CompressionGear {
         public Yaz0() {
