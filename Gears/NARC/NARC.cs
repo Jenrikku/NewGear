@@ -221,23 +221,23 @@ namespace NewGear.Gears.Containers {
 
             void FolderIterate(BranchNode branchNode) {
                 foreach(INode node in branchNode) {
-                    if(node is BranchNode) // If it is a "folder" then iterate through it.
-                        FolderIterate((BranchNode) node);
-                    else                   // If it is a file then add its content to the list.
-                        fileContainer.Add(node.Contents);
+                    if(node is BranchNode subBranchNode) // If it is a "folder" then iterate through it.
+                        FolderIterate(subBranchNode);
+                    else                                 // If it is a file then add its content to the list.
+                        fileContainer.Add(node.Metadata);
                 }
             }
 
             void WriteBFNTEntry(BranchNode entry) {
                 foreach(INode node in entry) {
-                    if(node is BranchNode) { // If it is a "folder".
+                    if(node is BranchNode branchNode) { // If it is a "folder".
                         writer.Write((byte) (node.ID.Length + 0x80));  // ID's length.
                         writer.Write(node.ID,
                             BinaryStringFormat.NoPrefixOrTermination); // ID.
                         writer.Write(folderCount++);                   // Folder id. (count)
                         writer.Write((byte) 0xF0);                     // Constant.
 
-                        WriteBFNTEntry((BranchNode) node);
+                        WriteBFNTEntry(branchNode);
                     } else {
                         writer.Write(node.ID); // File name.
                     }

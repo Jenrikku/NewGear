@@ -14,7 +14,7 @@ namespace NewGear.MainMachine.GUI {
                 if(ImGui.MenuItem("Open", "Ctrl+O")) {
                     IEnumerable<string> files = Dialogs.OpenFileDialog(allowMultipleSelects: true);
 
-                    if(!(files is null))
+                    if(files is not null)
                         FileManager.OpenFiles(files.ToArray());
                 }
 
@@ -35,12 +35,12 @@ namespace NewGear.MainMachine.GUI {
                     string result = Dialogs.SaveFileDialog(
                         defaultPath: FileManager.CurrentFile.FullName,
                         filter: "*" + Path.GetExtension(FileManager.CurrentFile.FullName),
-                        filterName: new string(Path.GetExtension(FileManager.CurrentFile.FullName)).Substring(1).ToUpperInvariant() + " file");
+                        filterName: new string(Path.GetExtension(FileManager.CurrentFile.FullName))[1..].ToUpperInvariant() + " file");
 
-                    if(!(result is null)) {
+                    if(result is not null) {
                         byte[] buffer = FileManager.CurrentFile.Gear.Write();
 
-                        if(!(FileManager.CurrentFile.Gear.CompressionAlgorithm is null))
+                        if(FileManager.CurrentFile.Gear.CompressionAlgorithm is not null)
                             buffer = FileManager.CurrentFile.Gear.CompressionAlgorithm.Compress(buffer);
 
                         File.WriteAllBytes(result, buffer);
@@ -79,7 +79,7 @@ namespace NewGear.MainMachine.GUI {
 
             #region File selector
 
-            if(!(FileManager.CurrentFile is null)) {
+            if(FileManager.CurrentFile is not null) {
                 // Used for keeping track of duplicated names.
                 List<string> currentNames = new();
 

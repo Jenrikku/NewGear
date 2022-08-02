@@ -139,7 +139,7 @@ namespace NewGear.MainMachine.GUI.WindowSystem.Windows {
                 }
             }
 
-            void RotateVectorY(ref Vector3 vector, double angle) {
+            static void RotateVectorY(ref Vector3 vector, double angle) {
                 double cos = Math.Cos(angle);
                 double sin = Math.Sin(angle);
 

@@ -36,38 +36,38 @@ namespace NewGear.MainMachine.GUI.WindowSystem.Windows {
 
             RenderChildren(RootNode);
 
-            void RenderChildren(BranchNode parent) {
+            static void RenderChildren(BranchNode parent) {
                 foreach(INode child in parent) {
-                    if(child is BranchNode) {
-                        if(ImGui.TreeNodeEx(child.ID)) {
-                            RenderChildren((BranchNode) child);
+                    if(child is BranchNode branchNode) {
+                        if(ImGui.TreeNodeEx(child.ID)) {    // Branch node.
+                            RenderChildren(branchNode);
                             ImGui.TreePop();
                         }
-                    } else {
-                        // When file is selected
-                        if(ImGui.Selectable(child.ID))
-                            if(!(FileManager.CurrentFile is null))
-                                FileManager.CurrentFile.CurrentSubFile = child.Contents;
+                    } else if(child is LeafNode leafNode) { // Leaf node.
+                        // When file is selected:
+                        if(ImGui.Selectable(leafNode.ID))
+                            if(FileManager.CurrentFile is not null)
+                                FileManager.CurrentFile.CurrentSubFile = leafNode.Contents;
 
                         // Context Menu
                         if(ImGui.BeginPopupContextItem()) {
                             if(ImGui.Selectable("Export")) {
                                 string? result = Dialogs.SaveFileDialog(
-                                    defaultPath: child.ID,
-                                    filter: "*" + Path.GetExtension(child.ID),
-                                    filterName: new string(Path.GetExtension(child.ID)).Substring(1).ToUpperInvariant() + " file");
+                                    defaultPath: leafNode.ID,
+                                    filter: "*" + Path.GetExtension(leafNode.ID),
+                                    filterName: new string(Path.GetExtension(leafNode.ID))[1..].ToUpperInvariant() + " file");
 
                                 if(result != null)
-                                    File.WriteAllBytes(result, (byte[]) (child.Contents ?? new byte[0]));
+                                    File.WriteAllBytes(result, (byte[]) (leafNode.Contents ?? Array.Empty<byte>()));
                             }
 
                             if(ImGui.Selectable("Replace")) {
                                 string? result = Dialogs.OpenFileDialog()?.First();
 
                                 if(result != null) {
-                                    child.Contents = File.ReadAllBytes(result);
+                                    leafNode.Contents = File.ReadAllBytes(result);
 
-                                    if(!(FileManager.CurrentFile is null))
+                                    if(FileManager.CurrentFile is not null)
                                         FileManager.CurrentFile.Saved = false;
                                 }
                             }
