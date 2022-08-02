@@ -20,7 +20,12 @@ namespace NewGear.GearSystem {
                 // Adds all types to the lists, according to their parent classes.
                 foreach(Type type in assembly.ExportedTypes) {
                     if(!type.IsNested) {
-                        Console.WriteLine($"Loading gear {type.Name}...");
+                        string loadingString = $"Loading gear {type.Name}...";
+
+                        if(type.Name != Path.GetFileNameWithoutExtension(file.Name))
+                            loadingString += $" (from {file.Name})";
+
+                        Console.WriteLine(loadingString);
 
                         switch(type) {
                             case Type x when x.IsAssignableTo(typeof(DataGear)):
