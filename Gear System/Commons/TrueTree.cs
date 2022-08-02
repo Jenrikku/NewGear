@@ -7,6 +7,10 @@ namespace NewGear.TrueTree {
         /// </summary>
         public dynamic ID { get; set; }
         /// <summary>
+        /// Used to store data that does not belong to the node's contents.
+        /// </summary>
+        public dynamic? Metadata { get; set; }
+        /// <summary>
         /// The contents of this node, used to store various data.
         /// </summary>
         public dynamic? Contents { get; set; }
@@ -66,6 +70,7 @@ namespace NewGear.TrueTree {
 
         public dynamic ID { get; set; }
         public dynamic? Contents { get; set; }
+        public dynamic? Metadata { get; set; }
         public BranchNode? Parent { get; set; }
     }
 
@@ -77,6 +82,7 @@ namespace NewGear.TrueTree {
         // Interface implementation.
         public dynamic ID { get; set; }
         public dynamic? Contents { get; set; }
+        public dynamic? Metadata { get; set; }
         public BranchNode? Parent { get; set; }
     }
 }

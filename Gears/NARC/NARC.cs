@@ -9,7 +9,7 @@ namespace NewGear.Gears.Containers {
     public class NARC : ContainerGear {
         public NARC() {
             // Initialize
-            RootNode.Contents = new NARCHeader() {
+            RootNode.Metadata = new NARCHeader() {
                 Version = 0x0100,
                 bfntUnknown = new byte[] {
                     0x00, 0x00, 0x01, 0x00
@@ -34,10 +34,10 @@ namespace NewGear.Gears.Containers {
             reader.ByteOrder = ByteOrder;
 
             // Prevention of outside modifications.
-            if(!(RootNode.Contents is NARCHeader))
-                RootNode.Contents = new NARCHeader();
+            if(RootNode.Metadata is not NARCHeader)
+                RootNode.Metadata = new NARCHeader();
 
-            RootNode.Contents.Version = reader.ReadUInt16();
+            RootNode.Metadata.Version = reader.ReadUInt16();
 
             reader.Position += 4; // Length skip (calculated when writing).
 
@@ -84,9 +84,9 @@ namespace NewGear.Gears.Containers {
 
             uint bfntUnknownLength = reader.ReadUInt32() - 4;
 
-            RootNode.Contents.bfntUnknown = new byte[bfntUnknownLength];
+            RootNode.Metadata.bfntUnknown = new byte[bfntUnknownLength];
             for(int i = 0; i < bfntUnknownLength; i++)
-                RootNode.Contents.bfntUnknown[i] = reader.ReadByte();
+                RootNode.Metadata.bfntUnknown[i] = reader.ReadByte();
             #endregion
 
             BranchNode currentFolder = RootNode;
@@ -140,7 +140,7 @@ namespace NewGear.Gears.Containers {
             writer.Write("NARC",
                 BinaryStringFormat.NoPrefixOrTermination); // Magic string.
             writer.Write((ushort) 0xFFFE);                 // Byte order.
-            writer.Write(RootNode.Contents?.Version);      // Version.
+            writer.Write(RootNode.Metadata?.Version);      // Version.
             writer.Position += 4;                          // Length skip. (calculated later)
             writer.Write((ushort) 0x10);                   // Header length.
             writer.Write((ushort) 0x03);                   // Section count.
@@ -168,8 +168,8 @@ namespace NewGear.Gears.Containers {
             long bfntLengthIndex = writer.Position; // For calculation the position later.
 
             writer.Position += 4;                                    // Length skip. (calculated later)
-            writer.Write(RootNode.Contents?.bfntUnknown.Length + 4); // Header length.
-            writer.Write(RootNode.Contents?.bfntUnknown);            // Header data.
+            writer.Write(RootNode.Metadata?.bfntUnknown.Length + 4); // Header length.
+            writer.Write(RootNode.Metadata?.bfntUnknown);            // Header data.
 
             byte folderCount = 1;
             WriteBFNTEntry(RootNode); // Write all BFNT entries recursively.
