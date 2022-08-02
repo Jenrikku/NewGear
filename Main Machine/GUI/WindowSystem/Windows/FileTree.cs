@@ -53,19 +53,38 @@ namespace NewGear.MainMachine.GUI.WindowSystem.Windows {
                         if(ImGui.BeginPopupContextItem()) {
                             if(ImGui.Selectable("Export")) {
                                 string? result = Dialogs.SaveFileDialog(
+                                    title: "Export at...",
                                     defaultPath: leafNode.ID,
                                     filter: "*" + Path.GetExtension(leafNode.ID),
                                     filterName: new string(Path.GetExtension(leafNode.ID))[1..].ToUpperInvariant() + " file");
 
                                 if(result != null)
-                                    File.WriteAllBytes(result, (byte[]) (leafNode.Contents ?? Array.Empty<byte>()));
+                                    try {
+                                        File.WriteAllBytes(result, (byte[]) (leafNode.Contents ?? Array.Empty<byte>()));
+                                    } catch {
+                                        Dialogs.MessageBox(
+                                            buttons: Dialogs.MessageBoxButtons.Ok,
+                                            iconType: Dialogs.MessageBoxIconType.Error,
+                                            defaultButton: Dialogs.MessageBoxDefaultButton.OkYes,
+                                            message: "The file could not be exported."
+                                            );
+                                    }
                             }
 
                             if(ImGui.Selectable("Replace")) {
-                                string? result = Dialogs.OpenFileDialog()?.First();
+                                string? result = Dialogs.OpenFileDialog("Replace with...")?.First();
 
                                 if(result != null) {
-                                    leafNode.Contents = File.ReadAllBytes(result);
+                                    try {
+                                        leafNode.Contents = File.ReadAllBytes(result);
+                                    } catch {
+                                        Dialogs.MessageBox(
+                                            buttons: Dialogs.MessageBoxButtons.Ok,
+                                            iconType: Dialogs.MessageBoxIconType.Error,
+                                            defaultButton: Dialogs.MessageBoxDefaultButton.OkYes,
+                                            message: "The file could not be replaced."
+                                            );
+                                    }
 
                                     if(FileManager.CurrentFile is not null)
                                         FileManager.CurrentFile.Saved = false;

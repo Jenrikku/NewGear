@@ -25,7 +25,16 @@ namespace NewGear.MainMachine.GUI {
                     if(FileManager.CurrentFile is null)
                         return false;
 
-                    File.WriteAllBytes(FileManager.CurrentFile.FullName, FileManager.CurrentFile.Gear.Write());
+                    try {
+                        File.WriteAllBytes(FileManager.CurrentFile.FullName, FileManager.CurrentFile.Gear.Write());
+                    } catch {
+                        Dialogs.MessageBox(
+                            buttons: Dialogs.MessageBoxButtons.Ok,
+                            iconType: Dialogs.MessageBoxIconType.Error,
+                            defaultButton: Dialogs.MessageBoxDefaultButton.OkYes,
+                            message: "The file could not be saved."
+                            );
+                    }
                 }
 
                 if(ImGui.MenuItem("Save As...", "Ctrl+Shift+S")) {
@@ -42,8 +51,18 @@ namespace NewGear.MainMachine.GUI {
 
                         if(FileManager.CurrentFile.Gear.CompressionAlgorithm is not null)
                             buffer = FileManager.CurrentFile.Gear.CompressionAlgorithm.Compress(buffer);
+                        
+                        try {
+                            File.WriteAllBytes(result, buffer);
+                        } catch {
+                            Dialogs.MessageBox(
+                                buttons: Dialogs.MessageBoxButtons.Ok,
+                                iconType: Dialogs.MessageBoxIconType.Error,
+                                defaultButton: Dialogs.MessageBoxDefaultButton.OkYes,
+                                message: "The file could not be saved."
+                                );
+                        }
 
-                        File.WriteAllBytes(result, buffer);
                         FileManager.CurrentFile.FullName = result;
                         FileManager.CurrentFile.Name = Path.GetFileName(result);
                     }
