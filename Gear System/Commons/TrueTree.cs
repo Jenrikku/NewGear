@@ -15,6 +15,10 @@ namespace NewGear.TrueTree {
         /// </summary>
         public dynamic? Contents { get; set; }
         /// <summary>
+        /// Represents a link between the data on two nodes, normally from different trees.
+        /// </summary>
+        public INode? LinkedNode { get; set; }
+        /// <summary>
         /// Returns the parent node.
         /// </summary>
         public BranchNode? Parent { get; internal set; }
@@ -71,6 +75,7 @@ namespace NewGear.TrueTree {
         public dynamic ID { get; set; }
         public dynamic? Contents { get; set; }
         public dynamic? Metadata { get; set; }
+        public INode? LinkedNode { get; set; }
         public BranchNode? Parent { get; set; }
     }
 
@@ -83,6 +88,7 @@ namespace NewGear.TrueTree {
         public dynamic ID { get; set; }
         public dynamic? Contents { get; set; }
         public dynamic? Metadata { get; set; }
+        public INode? LinkedNode { get; set; }
         public BranchNode? Parent { get; set; }
     }
 }
