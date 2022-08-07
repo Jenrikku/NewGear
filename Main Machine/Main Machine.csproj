@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net6.0</TargetFramework>
+    <TargetFramework>net7.0</TargetFramework>
     <RootNamespace>NewGear.MainMachine</RootNamespace>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
@@ -28,12 +28,12 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Gears Include="$(BuildDirectory)\NARC.dll"/>
-    <Gears Include="$(BuildDirectory)\Yaz0.dll"/>
+    <Gears Include="$(BuildDirectory)\NARC.dll" />
+    <Gears Include="$(BuildDirectory)\Yaz0.dll" />
   </ItemGroup>
 
   <Target Name="MoveGears" AfterTargets="Build">
-    <Move SourceFiles="@(Gears)" DestinationFolder="$(BuildDirectory)\Gears\"/>
+    <Move SourceFiles="@(Gears)" DestinationFolder="$(BuildDirectory)\Gears\" />
   </Target>
 
 </Project>
