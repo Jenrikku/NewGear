@@ -18,11 +18,5 @@ namespace NewGear.MainMachine.GUI.WindowSystem {
                 }
             }
         }
-
-        public static void RenderContextMenu(Vector2 mousePosition) {
-            foreach(ImGUIWindow window in WindowList)
-                if(ImGui.IsMouseHoveringRect(window.WindowPositionMin, window.WindowPositionMax, false))
-                    window.ContextMenu(mousePosition);
-        }
     }
 }

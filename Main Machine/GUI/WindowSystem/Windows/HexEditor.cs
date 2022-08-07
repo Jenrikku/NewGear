@@ -18,9 +18,6 @@ namespace NewGear.MainMachine.GUI.WindowSystem.Windows {
     //   memory_editor.Draw("Memory Editor", mem_block, mem_block_size, (size_t)mem_block);     // run
 
     internal class HexEditor : ImGUIWindow {
-        public Vector2 WindowPositionMin { get; set; }
-        public Vector2 WindowPositionMax { get; set; }
-
         public bool AllowEdits = true;
         public int Column = 16;
         public int DataEditingAddr = -1;
@@ -197,10 +194,6 @@ namespace NewGear.MainMachine.GUI.WindowSystem.Windows {
             ImGui.PopItemWidth();
 
             ImGui.End();
-        }
-
-        public void ContextMenu(Vector2 mousePosition) {
-            return;
         }
 
         private static string FixedHex(int v, int count) {

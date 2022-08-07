@@ -2,7 +2,6 @@
 using NewGear.MainMachine.FileSystem;
 using NewGear.MainMachine.GUI.WindowSystem;
 using Raylib_cs;
-using System.Numerics;
 
 using static NewGear.MainMachine.GUI.Constants;
 
@@ -51,9 +50,6 @@ namespace NewGear.MainMachine.GUI {
 
                 if(RenderMainMenuBar())
                     break; // Go to dispose.
-
-                if(ImGui.GetIO().MouseClicked[1])
-                    WindowManager.RenderContextMenu(ImGui.GetIO().MousePos);
 
                 ImGui.End();
 

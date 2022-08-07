@@ -9,9 +9,6 @@ namespace NewGear.MainMachine.GUI.WindowSystem.Windows {
     internal class FileTree : ImGUIWindow {
         private static BranchNode? RootNode;
 
-        public Vector2 WindowPositionMin { get; set; }
-        public Vector2 WindowPositionMax { get; set; }
-
         public FileTree() {
             FileManager.FileChanged += () => {
                 // If the file can be displayed as a file tree:
@@ -26,8 +23,6 @@ namespace NewGear.MainMachine.GUI.WindowSystem.Windows {
         public void Render() {
             ImGui.SetNextWindowSize(new(500, 350), ImGuiCond.FirstUseEver);
             ImGui.Begin("File Tree", ref MainWindow.OpenedWindows[0]);
-            WindowPositionMin = ImGui.GetWindowPos();
-            WindowPositionMax = WindowPositionMin + ImGui.GetWindowSize();
 
             if(RootNode is null) {
                 ImGui.TextDisabled("There is nothing to show.");
@@ -96,10 +91,6 @@ namespace NewGear.MainMachine.GUI.WindowSystem.Windows {
                     }
                 }
             }
-        }
-
-        public void ContextMenu(Vector2 mousePosition) {
-            return;
         }
     }
 }

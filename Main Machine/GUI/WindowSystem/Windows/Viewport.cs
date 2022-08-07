@@ -8,9 +8,6 @@ using static NewGear.MainMachine.GUI.MainWindow;
 
 namespace NewGear.MainMachine.GUI.WindowSystem.Windows {
     internal class Viewport : ImGUIWindow {
-        public Vector2 WindowPositionMin { get; set; }
-        public Vector2 WindowPositionMax { get; set; }
-
         private Camera3D camera = new(new(0, 2, -10), new(), Vector3.UnitY, 60, CameraProjection.CAMERA_PERSPECTIVE);
         private Vector3 cameraDirection = new(0, 0, 1);
 
@@ -41,8 +38,6 @@ namespace NewGear.MainMachine.GUI.WindowSystem.Windows {
 
             ImGui.SetNextWindowSize(new(500, 350), ImGuiCond.FirstUseEver);
             ImGui.Begin("Viewport", ref OpenedWindows[1]);
-            WindowPositionMin = ImGui.GetWindowPos();
-            WindowPositionMax = WindowPositionMin + ImGui.GetWindowSize();
 
             //if(FileManager.CurrentFile?.CurrentSubFile is null) {
             //    ImGui.TextDisabled("There is no model data to show.");
@@ -146,10 +141,6 @@ namespace NewGear.MainMachine.GUI.WindowSystem.Windows {
                 vector.X = (float) (vector.X * cos - vector.Z * sin);
                 vector.Z = (float) (vector.X * sin + vector.Z * cos);
             }
-        }
-
-        public void ContextMenu(Vector2 mousePosition) {
-            return;
         }
     }
 }
