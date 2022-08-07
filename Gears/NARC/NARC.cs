@@ -241,6 +241,13 @@ namespace NewGear.Gears.Containers {
         }
 
         public struct NARCHeader {
+            public NARCHeader() {
+                Version = 0x0100;
+                bfntUnknown = new byte[] {
+                    0x00, 0x00, 0x01, 0x00
+                };
+            }
+
             public ushort Version;
             public byte[] bfntUnknown;
         }
