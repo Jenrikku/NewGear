@@ -1,4 +1,4 @@
-﻿using NewGear.GearSystem.AbstractGears;
+﻿using NewGear.GearSystem.InterfaceGears;
 using NewGear.TrueTree;
 using Syroot.BinaryData;
 using System.Diagnostics;
@@ -6,23 +6,16 @@ using System.Text;
 
 // Code adapted from NARCSharp (https://github.com/Jenrikku/NARCSharp)
 namespace NewGear.Gears.Containers {
-    public class NARC : ContainerGear {
-        public NARC() {
-            // Initialize
-            RootNode.Metadata = new NARCHeader() {
-                Version = 0x0100,
-                bfntUnknown = new byte[] {
-                    0x00, 0x00, 0x01, 0x00
-                }
-            };
-        }
+    public class NARC : IContainerGear, IModifiableGear {
+        public BranchNode RootNode { get; set; } = new('*') { Metadata = new NARCHeader() };
+        public ICompressionGear? CompressionAlgorithm { get; set; }
+        public ByteOrder ByteOrder { get; set; }
 
-        /// <returns>Whether or not the given data matches this gear's specifications.</returns>
-        public static new bool Identify(byte[] data) {
+        public static bool Identify(byte[] data) {
             return Encoding.ASCII.GetString(data[0..4]) == "NARC";
         }
 
-        public override void Read(Stream stream, Encoding encoding, bool leaveOpen = false) {
+        public void Read(Stream stream, Encoding encoding, bool leaveOpen = false) {
             using BinaryDataReader reader = new(stream, encoding, leaveOpen);
 
             // Magic check:
@@ -131,7 +124,7 @@ namespace NewGear.Gears.Containers {
             }
         }
 
-        public override void Write(Stream stream, Encoding encoding, bool leaveOpen = false) {
+        public void Write(Stream stream, Encoding encoding, bool leaveOpen = false) {
             using BinaryDataWriter writer = new(stream, encoding, leaveOpen) {
                 ByteOrder = ByteOrder
             };

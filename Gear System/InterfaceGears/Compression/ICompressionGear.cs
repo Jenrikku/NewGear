@@ -1,10 +1,10 @@
-﻿namespace NewGear.GearSystem.AbstractGears {
-    public abstract class CompressionGear : Gear {
+﻿namespace NewGear.GearSystem.InterfaceGears {
+    public interface ICompressionGear : IGear {
         /// <summary>
         /// The level of compression used.
         /// </summary>
         public byte? Level { get; set; }
-        public byte[]? Reserved;
+        public byte[]? Reserved { get; set; }
 
         #region Compression
 

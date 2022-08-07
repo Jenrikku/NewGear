@@ -1,4 +1,4 @@
-﻿using NewGear.GearSystem.AbstractGears;
+﻿using NewGear.GearSystem.InterfaceGears;
 using Syroot.BinaryData;
 using System.Collections;
 using System.Runtime.InteropServices;
@@ -7,20 +7,15 @@ using System.Text;
 // Code based of Hack.IO (https://github.com/SuperHackio/Hack.io/blob/master/Hack.io.YAZ0/YAZ0.cs)
 // and EveryFileExplorer (https://github.com/Gericom/EveryFileExplorer/blob/master/CommonCompressors/YAZ0.cs)
 namespace NewGear.Gears.Compression {
-    public class Yaz0 : CompressionGear {
-        public Yaz0() {
-            Level = 5;
-        }
+    public class Yaz0 : ICompressionGear {
+        public byte? Level { get; set; } = 5;
+        public byte[]? Reserved { get; set; }
 
-        /// <returns>Whether or not the given data matches this compression method's specifications.</returns>
-        public static new bool Identify(byte[] data) {
+        public static bool Identify(byte[] data) {
             return Encoding.ASCII.GetString(data[0..4]) == "Yaz0";
         }
 
-        /// <summary>
-        /// Compresses a byte array.
-        /// </summary>
-        public unsafe new byte[] Compress(byte[] data) {
+        public unsafe byte[] Compress(byte[] data) {
             int maxBackLevel = Level is null ? 256 : (int) (0x10e0 * (Level / 9.0) - 0x0e0);
 
             byte* dataptr = (byte*) Marshal.UnsafeAddrOfPinnedArrayElement(data, 0);
@@ -119,7 +114,7 @@ namespace NewGear.Gears.Compression {
             return realresult;
         }
 
-        public unsafe override byte[] Compress(Stream stream, bool leaveOpen = false) {
+        public unsafe byte[] Compress(Stream stream, bool leaveOpen = false) {
             byte[] buffer = new byte[stream.Length];
             stream.Read(buffer, 0, buffer.Length);
 
@@ -176,7 +171,7 @@ namespace NewGear.Gears.Compression {
             //return null;
         }
 
-        public override byte[] Decompress(Stream stream, bool leaveOpen = false) {
+        public byte[] Decompress(Stream stream, bool leaveOpen = false) {
             MemoryStream result = new();
 
             using BinaryDataReader reader = new(stream, Encoding.Default, leaveOpen);

@@ -1,4 +1,4 @@
-﻿using NewGear.GearSystem.AbstractGears;
+﻿using NewGear.GearSystem.InterfaceGears;
 using System.Reflection;
 
 namespace NewGear.GearSystem {
@@ -28,11 +28,11 @@ namespace NewGear.GearSystem {
                         Console.WriteLine(loadingString);
 
                         switch(type) {
-                            case Type x when x.IsAssignableTo(typeof(DataGear)):
+                            case Type x when x.IsAssignableTo(typeof(IReadableGear)):
                                 LoadedDataGears.Add(type);
                                 break;
 
-                            case Type x when x.IsAssignableTo(typeof(CompressionGear)):
+                            case Type x when x.IsAssignableTo(typeof(ICompressionGear)):
                                 LoadedCompressionGears.Add(type);
                                 break;
 
