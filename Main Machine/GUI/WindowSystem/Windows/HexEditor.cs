@@ -33,12 +33,12 @@ namespace NewGear.MainMachine.GUI.WindowSystem.Windows {
                 return;
             }
 
-            if(FileManager.CurrentFile?.CurrentSubFile is null) {
+            if(FileManager.SelectedFile is null) {
                 ImGui.TextDisabled("Select an item to display its contents.");
                 return;
             }
 
-            int fileLength = FileManager.CurrentFile.CurrentSubFile.Length;
+            int fileLength = FileManager.SelectedFile.LinkedNode?.Contents?.Length;
 
             float line_height = ImGuiNative.igGetTextLineHeight();
             int line_total_count = (fileLength + Column - 1) / Column;
@@ -105,7 +105,7 @@ namespace NewGear.MainMachine.GUI.WindowSystem.Windows {
                         bool data_write = false;
                         if(DataEditingTakeFocus) {
                             ImGui.SetKeyboardFocusHere();
-                            ReplaceChars(DataInput, FixedHex(FileManager.CurrentFile.CurrentSubFile[addr], 2));
+                            ReplaceChars(DataInput, FixedHex(FileManager.SelectedFile.LinkedNode?.Contents?[addr], 2));
                             ReplaceChars(AddrInput, FixedHex(BaseDisplayAddress + addr, addr_digits_count));
                         }
                         ImGui.PushItemWidth(ImGui.CalcTextSize("FF").X);
@@ -123,12 +123,12 @@ namespace NewGear.MainMachine.GUI.WindowSystem.Windows {
                             data_write = data_next = true;
                         if(data_write) {
                             int data;
-                            if(TryHexParse(DataInput, out data))
-                                FileManager.CurrentFile.CurrentSubFile[addr] = (byte) data;
+                            if(TryHexParse(DataInput, out data) && FileManager.SelectedFile.LinkedNode?.Contents is not null)
+                                FileManager.SelectedFile.LinkedNode.Contents[addr] = (byte) data;
                         }
                         ImGui.PopID();
                     } else {
-                        ImGui.Text(FixedHex(FileManager.CurrentFile.CurrentSubFile[addr], 2));
+                        ImGui.Text(FixedHex(FileManager.SelectedFile.LinkedNode?.Contents?[addr], 2));
                         if(AllowEdits && ImGui.IsItemHovered() && ImGui.IsMouseClicked(0)) {
                             DataEditingTakeFocus = true;
                             DataEditingAddr = addr;
@@ -144,7 +144,7 @@ namespace NewGear.MainMachine.GUI.WindowSystem.Windows {
                 var asciiVal = new System.Text.StringBuilder(2 + Column);
                 asciiVal.Append("| ");
                 for(int n = 0; n < Column && addr < fileLength; n++, addr++) {
-                    int c = FileManager.CurrentFile.CurrentSubFile[addr];
+                    int c = FileManager.SelectedFile.LinkedNode?.Contents?[addr];
                     asciiVal.Append((c >= 32 && c < 128) ? Convert.ToChar(c) : '.');
                 }
                 ImGui.TextUnformatted(asciiVal.ToString());  //use unformatted, so string can contain the '%' character
@@ -203,8 +203,8 @@ namespace NewGear.MainMachine.GUI.WindowSystem.Windows {
         private static bool TryHexParse(byte[] bytes, out int result) {
             string input = System.Text.Encoding.UTF8.GetString(bytes).ToString();
 
-            if(!(FileManager.CurrentFile is null))
-                FileManager.CurrentFile.Saved = false;
+            //if(!(FileManager.CurrentFile is null))
+            //    FileManager.CurrentFile.Saved = false;
 
             return int.TryParse(input, NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out result);
         }
@@ -215,8 +215,8 @@ namespace NewGear.MainMachine.GUI.WindowSystem.Windows {
                 bytes[i] = (i < address.Length) ? address[i] : (byte) 0;
             }
 
-            if(!(FileManager.CurrentFile is null))
-                FileManager.CurrentFile.Saved = false;
+            //if(!(FileManager.CurrentFile is null))
+            //    FileManager.CurrentFile.Saved = false;
         }
 
 

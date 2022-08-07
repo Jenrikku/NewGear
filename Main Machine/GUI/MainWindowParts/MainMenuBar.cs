@@ -1,6 +1,10 @@
 ﻿using ImGuiNET;
+using NewGear.GearSystem.InterfaceGears;
 using NewGear.MainMachine.FileSystem;
+using NewGear.TrueTree;
 using TinyDialogsNet;
+
+using static NewGear.MainMachine.FileSystem.FileManager;
 
 namespace NewGear.MainMachine.GUI {
     internal static partial class MainWindow {
@@ -15,42 +19,43 @@ namespace NewGear.MainMachine.GUI {
                     IEnumerable<string> files = Dialogs.OpenFileDialog(allowMultipleSelects: true);
 
                     if(files is not null)
-                        FileManager.OpenFiles(files.ToArray());
+                        OpenFiles(files.ToArray());
                 }
 
-                if(FileManager.CurrentFile is null)
+                if(CurrentFile is null || CurrentFile?.Contents is not IModifiableGear)
                     ImGui.BeginDisabled();
 
                 if(ImGui.MenuItem("Save", "Ctrl+S")) {
-                    if(FileManager.CurrentFile is null)
+                    if(CurrentFile is null)
                         return false;
 
-                    try {
-                        File.WriteAllBytes(FileManager.CurrentFile.FullName, FileManager.CurrentFile.Gear.Write());
-                    } catch {
-                        Dialogs.MessageBox(
-                            buttons: Dialogs.MessageBoxButtons.Ok,
-                            iconType: Dialogs.MessageBoxIconType.Error,
-                            defaultButton: Dialogs.MessageBoxDefaultButton.OkYes,
-                            message: "The file could not be saved."
-                            );
-                    }
+                    if(CurrentFile.Contents is IModifiableGear gear)
+                        try {
+                            File.WriteAllBytes(CurrentFile.Metadata?.SavePath, gear.Write());
+                        } catch {
+                            Dialogs.MessageBox(
+                                buttons: Dialogs.MessageBoxButtons.Ok,
+                                iconType: Dialogs.MessageBoxIconType.Error,
+                                defaultButton: Dialogs.MessageBoxDefaultButton.OkYes,
+                                message: "The file could not be saved."
+                                );
+                        }
                 }
 
                 if(ImGui.MenuItem("Save As...", "Ctrl+Shift+S")) {
-                    if(FileManager.CurrentFile is null)
+                    if(CurrentFile is null)
                         return false;
 
                     string result = Dialogs.SaveFileDialog(
-                        defaultPath: FileManager.CurrentFile.FullName,
-                        filter: "*" + Path.GetExtension(FileManager.CurrentFile.FullName),
-                        filterName: new string(Path.GetExtension(FileManager.CurrentFile.FullName))[1..].ToUpperInvariant() + " file");
+                        defaultPath: CurrentFile.Metadata?.SavePath,
+                        filter: "*" + Path.GetExtension(CurrentFile.Metadata?.SavePath),
+                        filterName: new string(Path.GetExtension(CurrentFile.Metadata?.SavePath))[1..].ToUpperInvariant() + " file");
 
-                    if(result is not null) {
-                        byte[] buffer = FileManager.CurrentFile.Gear.Write();
+                    if(result is not null && CurrentFile.Contents is IModifiableGear gear) {
+                        byte[] buffer = gear.Write();
 
-                        if(FileManager.CurrentFile.Gear.CompressionAlgorithm is not null)
-                            buffer = FileManager.CurrentFile.Gear.CompressionAlgorithm.Compress(buffer);
+                        if(CurrentFile.Contents.CompressionAlgorithm is not null)
+                            buffer = CurrentFile.Contents.CompressionAlgorithm.Compress(buffer);
                         
                         try {
                             File.WriteAllBytes(result, buffer);
@@ -63,22 +68,22 @@ namespace NewGear.MainMachine.GUI {
                                 );
                         }
 
-                        FileManager.CurrentFile.FullName = result;
-                        FileManager.CurrentFile.Name = Path.GetFileName(result);
+                        if(CurrentFile.Metadata is not null)
+                            CurrentFile.Metadata.SavePath = result;
+
+                        CurrentFile.ID = Path.GetFileName(result);
                     }
                 }
 
-                if(ImGui.MenuItem("Close File")) {
-                    FileManager.CloseCurrentFile();
-                }
+                if(ImGui.MenuItem("Close File"))
+                    CloseCurrentFile();
 
                 ImGui.EndDisabled(); // Only executed if no file is loaded.
 
                 ImGui.Separator();
 
-                if(ImGui.MenuItem("Exit")) {
+                if(ImGui.MenuItem("Exit"))
                     return true; // Go to dispose.
-                };
 
                 ImGui.EndMenu();
             }
@@ -98,26 +103,26 @@ namespace NewGear.MainMachine.GUI {
 
             #region File selector
 
-            if(FileManager.CurrentFile is not null) {
+            if(CurrentFile is not null) {
                 // Used for keeping track of duplicated names.
                 List<string> currentNames = new();
 
                 ImGui.SetNextItemWidth(ImGui.GetWindowWidth() - 500);
-                if(ImGui.BeginCombo("Current file", FileManager.CurrentFile.Name))
-                    foreach(LoadedFile file in FileManager.LoadedFiles) {
-                        if(currentNames.Contains(file.Name) && !file.Name.EndsWith(')')) { // Prevent duplicates.
-                            LoadedFile previousFile = FileManager.LoadedFiles[currentNames.IndexOf(file.Name)];
+                if(ImGui.BeginCombo("Current file", CurrentFile.ID))
+                    foreach(INode file in LoadedFiles) {
+                        if(currentNames.Contains(file.ID) && !file.ID.EndsWith(')')) { // Prevent duplicates.
+                            INode previousFile = LoadedFiles[currentNames.IndexOf(file.ID)];
                             // Set name of previous file with the same name.
-                            previousFile.Name += $" ({previousFile.FullName})";
+                            previousFile.ID += $" ({previousFile.Metadata?.SavePath})";
 
                             // Set name of this file.
-                            file.Name += $" ({file.FullName})";
+                            file.ID += $" ({file.Metadata?.SavePath})";
                         }
 
-                        currentNames.Add(file.Name);
+                        currentNames.Add(file.ID);
 
-                        if(ImGui.Selectable(file.Name)) // If the file has been selected
-                            FileManager.CurrentFile = file;
+                        if(ImGui.Selectable(file.ID)) // If the file has been selected
+                            CurrentFile = file;
                     }
 
                 ImGui.EndCombo();
