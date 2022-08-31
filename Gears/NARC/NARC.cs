@@ -102,7 +102,7 @@ namespace NewGear.Gears.Containers {
                     continue;
                 }
 
-                // Decompress BFAT section:
+                // Read BFAT section:
                 using(reader.TemporarySeek()) {
                     reader.Position = bfatIndex;
 
@@ -114,7 +114,7 @@ namespace NewGear.Gears.Containers {
 
                 LeafNode child = new(reader.ReadString(nameLength));
 
-                // Decompress FIMG section:
+                // Read FIMG section:
                 using(reader.TemporarySeek()) {
                     reader.Position = fimgIndex + currentFileOffset;
                     child.Contents = reader.ReadBytes((int) (currentFileEnd - currentFileOffset));
@@ -161,8 +161,8 @@ namespace NewGear.Gears.Containers {
             long bfntLengthIndex = writer.Position; // For calculation the position later.
 
             writer.Position += 4;                                    // Length skip. (calculated later)
-            writer.Write(RootNode.Metadata?.bfntUnknown.Length + 4); // Header length.
-            writer.Write(RootNode.Metadata?.bfntUnknown);            // Header data.
+            writer.Write(RootNode.Metadata?.bfntUnknown.Length + 4); // Unknown data length.
+            writer.Write(RootNode.Metadata?.bfntUnknown);            // Unknown data.
 
             byte folderCount = 1;
             WriteBFNTEntry(RootNode); // Write all BFNT entries recursively.
