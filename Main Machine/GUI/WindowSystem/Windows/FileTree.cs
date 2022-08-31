@@ -43,19 +43,23 @@ namespace NewGear.MainMachine.GUI.WindowSystem.Windows {
                         ImGui.TreePush();
 
                         // When file is selected:
-                        if(ImGui.Selectable(leafNode.ID))
+                        if(ImGui.Selectable(leafNode.ID, FileManager.SelectedFile == leafNode))
                             FileManager.SelectedFile = leafNode;
 
-                        // Context Menu
+                        // Context Menu (for files)
                         if(ImGui.BeginPopupContextItem()) {
                             if(ImGui.Selectable("Export")) {
+                                string? filterName = Path.GetExtension(leafNode.ID);
+                                if(filterName != string.Empty) // If the file has an extension.
+                                    filterName = new string(Path.GetExtension(leafNode.ID))[1..].ToUpperInvariant() + " file";
+
                                 string? result = Dialogs.SaveFileDialog(
                                     title: "Export at...",
                                     defaultPath: leafNode.ID,
-                                    filter: "*" + Path.GetExtension(leafNode.ID),
-                                    filterName: new string(Path.GetExtension(leafNode.ID))[1..].ToUpperInvariant() + " file");
+                                    filter: Path.GetExtension(leafNode.ID),
+                                    filterName: filterName);
 
-                                if(result != null)
+                                if(result is not null)
                                     try {
                                         File.WriteAllBytes(result, (byte[]) (leafNode.Contents ?? Array.Empty<byte>()));
                                     } catch {
@@ -71,7 +75,7 @@ namespace NewGear.MainMachine.GUI.WindowSystem.Windows {
                             if(ImGui.Selectable("Replace")) {
                                 string? result = Dialogs.OpenFileDialog("Replace with...")?.First();
 
-                                if(result != null) {
+                                if(result is not null) {
                                     try {
                                         leafNode.Contents = File.ReadAllBytes(result);
                                     } catch {
