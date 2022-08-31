@@ -21,6 +21,9 @@ namespace NewGear.MainMachine.GUI {
             SetExitKey(KeyboardKey.KEY_NULL);
             SetTargetFPS(60);
 
+            // Dark mode support (Windows 10+):
+            InitColorMode((nint) GetWindowHandle());
+
             Controller.Load(MAIN_WINDOW_WIDTH, MAIN_WINDOW_HEIGHT);
 
             GetIO().ConfigFlags |= ImGuiConfigFlags.DockingEnable;
