@@ -55,9 +55,12 @@ namespace NewGear.IO {
         /// <summary>
         /// Specifies the order of the bytes in relation to numerical storing.
         /// </summary>
-        public Endianness Endianness { get; set; } = default;
+        public ByteOrder ByteOrder { get; set; } = default;
 
         public Encoding DefaultEncoding { get; set; } = Encoding.ASCII;
+
+
+        // Reading --------------------
 
         public bool ReadBool() => *position++ == 1;
 
@@ -106,19 +109,24 @@ namespace NewGear.IO {
             return encoding.GetString(beginning, length);
         }
 
+
+        // Others ---------------------
+
+        public SeekTask TemporarySeek() => new(this);
+
         public void Dispose() {
             GC.SuppressFinalize(this);
             handleList.ForEach((GCHandle handle) => handle.Free());
         }
 
 
-        // private --------------------
+        // Private --------------------
 
         private ulong ReadNumericValue(byte byteAmount) {
             ulong result = 0;
 
             for(byte i = 0; i < byteAmount; i++)
-                if(BitConverter.IsLittleEndian == (Endianness == Endianness.LittleEndian)) // Endianness matches.
+                if(BitConverter.IsLittleEndian == (ByteOrder == ByteOrder.LittleEndian)) // ByteOrder matches.
                     result += (ulong) *position++ << 8 * i;
                 else
                     result += (ulong) *position++ >> 8 * (byteAmount - 1) - 8 * i;
@@ -127,8 +135,23 @@ namespace NewGear.IO {
         }
     }
 
-    public enum Endianness : ushort {
+    public enum ByteOrder : ushort {
         LittleEndian = 0xFEFF,
         BigEndian = 0xFFFE
+    }
+
+    public unsafe struct SeekTask : IDisposable {
+        private BinaryStream stream;
+        private long position;
+
+        public SeekTask(BinaryStream stream) {
+            this.stream = stream;
+            position = stream.Position;
+        }
+
+        /// <summary>
+        /// Returns the stream to the position it was when this instance was created.
+        /// </summary>
+        public void Dispose() => stream.Position = position;
     }
 }
