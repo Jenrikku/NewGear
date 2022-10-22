@@ -1,285 +1,312 @@
-﻿using System.Runtime.InteropServices;
+﻿using System.Collections;
+using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Text;
 
 namespace NewGear.IO {
-    public unsafe class BinaryStream : IDisposable {
-        private readonly List<GCHandle> handleList = new();
+    public unsafe class BinaryStream : IDisposable, IEnumerable<byte> {
+        // Each data block is 1MB long. (1048576 bytes)
+        private const int blockLength = 1048576;
 
-        private byte* baseAddress;
-        private byte* endAddress;
+        private readonly List<byte[]> dataBlocks = new();
+        private ulong position = 0;
+        
+        private byte* PointerAt(ulong position) {
+            int blockIndex = (int) (position / blockLength);
 
-        private byte* _position;
-        private byte* position {
-            get => _position;
-            set {
-                if(value > endAddress)
-                    Position += value - baseAddress;
-                else
-                    _position = value;
+            if(dataBlocks.Count - 1 < blockIndex)
+                ExtendMemory();
+
+            return (byte*) Marshal.UnsafeAddrOfPinnedArrayElement(
+                dataBlocks[blockIndex], (int) position - blockLength * blockIndex);
+        }
+
+        private void ExtendMemory() {
+            byte[] block = new byte[blockLength];
+
+            if(FillingNumber != 0x00)
+                Array.Fill(block, FillingNumber);
+
+            dataBlocks.Add(block);
+        }
+
+
+
+        // public --------------------------------
+
+        /// <summary>
+        /// Creates a new empty stream.
+        /// </summary>
+        /// <param name="fillingNumber">The number that will be written to all new empty spaces.</param>
+        public BinaryStream(byte fillingNumber = 0x00) {
+            FillingNumber = fillingNumber;
+            
+            ExtendMemory();
+        }
+
+        /// <summary>
+        /// Creates a stream from a copy of an existing array.
+        /// </summary>
+        /// <param name="fillingNumber">The number that will be written to all new empty spaces.</param>
+        public BinaryStream(byte[] data, byte fillingNumber = 0x00) {
+            FillingNumber = fillingNumber;
+
+            int partitionCount = data.Length / blockLength + 1;
+
+            for(int i = 0; i < partitionCount; i++) {
+                byte[] temp = new byte[blockLength];
+                int length = Math.Min(data.Length - i * blockLength, blockLength);
+
+                if(length == blockLength && fillingNumber != 0x00)
+                    Array.Fill(temp, fillingNumber);
+
+                Array.Copy(data, i * blockLength, temp, 0, length);
+
+                Length += (uint) length;
+                dataBlocks.Add(temp);
             }
         }
 
         /// <summary>
-        /// Creates an empty stream.
+        /// The position of the stream. The next value will be read from this position.
         /// </summary>
-        public BinaryStream() : this(Array.Empty<byte>()) { }
-
-        /// <summary>
-        /// Creates a stream from an existing array.
-        /// </summary>
-        public BinaryStream(byte[] buffer) {
-            if(buffer.Length == 0)
-                Array.Clear(buffer, 0, 1);
-
-            handleList.Add(GCHandle.Alloc(buffer, GCHandleType.Pinned));
-
-            baseAddress = (byte*) Marshal.UnsafeAddrOfPinnedArrayElement(buffer, 0);
-            endAddress = (byte*) Marshal.UnsafeAddrOfPinnedArrayElement(buffer, buffer.Length - 1);
-        }
-
-        /// <summary>
-        /// The position of the stream, next value will be read from this position.
-        /// </summary>
-        public long Position { 
-            get => position - baseAddress;
+        public ulong Position {
+            get => position;
             set {
-                if(Length < value) { // If the region needs to be extended. (Not tested)
-                    byte[] newBytes = new byte[value - Length];
-                    Array.Fill(newBytes, FillingNumber);
+                // Reserves more memory if required.
+                if((ulong) dataBlocks.Count * blockLength < value) {
+                    int newAmount = (int) (value / blockLength) - dataBlocks.Count;
 
-                    Marshal.Copy(newBytes, 0, (nint) (++endAddress), newBytes.Length);
-                    handleList.Add(GCHandle.FromIntPtr((nint) endAddress));
-
-                    endAddress += newBytes.Length;
+                    for(int i = 0; i < newAmount; i++)
+                        ExtendMemory();
                 }
-                
-                position = baseAddress + value;
+
+                if(Length < value)
+                    Length = value;
+
+                position = value;
             }
         }
 
         /// <summary>
-        /// Calculates the length of the stream.
+        /// The length of the data inside the stream.
         /// </summary>
-        public long Length => endAddress - baseAddress;
+        public ulong Length = 0;
 
         /// <summary>
-        /// Specifies the number that will be written to all empty new spaces.
+        /// Specifies the number that will be written to all new empty spaces.
         /// </summary>
         public byte FillingNumber { get; set; } = 0x00;
 
         /// <summary>
-        /// Specifies the order of the bytes in relation to numerical storing.
+        /// Specifies the order of the bytes when reading or writing a numeric value.
         /// </summary>
-        public ByteOrder ByteOrder { get; set; } = default;
+        public ByteOrder ByteOrder = BitConverter.IsLittleEndian ? ByteOrder.LittleEndian : ByteOrder.BigEndian;
 
         /// <summary>
         /// The default <see cref="Encoding"/> that will be used when reading strings if none is specified.
         /// </summary>
-        public Encoding DefaultEncoding { get; set; } = Encoding.ASCII;
+        public Encoding DefaultEncoding = Encoding.ASCII;
 
 
-        // Reading --------------------
-
-        // Regular values -------------
+        // Reading ----------------
 
         /// <summary>
-        /// Reads a <see cref="bool"/> and advances the position of the stream.
+        /// Read a value of the given type from the stream taking in mind <see cref="ByteOrder"/>.
         /// </summary>
-        public bool ReadBool() => *position++ == 1;
+        public T Read<T>() where T : unmanaged {
+            int size = sizeof(T);
+            byte[] bytes = new byte[size];
+            int pos = 0;
+            bool needsReading = true;
+
+            if(typeof(T) != typeof(byte) && // Skip byte (no byte order).
+               (!BitConverter.IsLittleEndian != (ByteOrder == ByteOrder.BigEndian))) { // ByteOrder does not match.
+
+                FieldInfo[] fields = typeof(T).GetFields();
+                if(fields.Length != 0) {
+                    foreach(FieldInfo field in fields) {
+                        if(field.IsLiteral /* (const) */) continue;
+                        needsReading = false;
+
+                        int fieldSize = Marshal.SizeOf(field.FieldType);
+
+                        for(int i = fieldSize - 1; i > -1; i++)
+                            bytes[i + pos] = *PointerAt(position++);
+                    }
+                }
+
+                if(needsReading) {
+                    for(uint i = 0; i < size; i++)
+                        bytes[i] = *PointerAt(position + (uint) size - i - 1);
+
+                    position += (uint) size;
+                    needsReading = false;
+                }
+            }
+
+            if(needsReading)
+                for(int i = 0; i < bytes.Length; i++)
+                    bytes[i] = *PointerAt(position++);
+
+            return *(T*) Marshal.UnsafeAddrOfPinnedArrayElement(bytes, 0);
+        }
 
         /// <summary>
-        /// Reads a <see cref="byte"/> and advances the position of the stream.
+        /// Reads an array from the stream and advances the position.
         /// </summary>
-        public byte ReadByte() => *position++;
-        /// <summary>
-        /// Reads a <see cref="sbyte"/> and advances the position of the stream.
-        /// </summary>
-        public sbyte ReadSByte() => *(sbyte*) position++;
+        public T[] Read<T>(int amount) where T : unmanaged {
+            T[] array = new T[amount];
+
+            for(int i = 0; i < amount; i++)
+                array[i] = Read<T>();
+
+            return array;
+        }
 
         /// <summary>
-        /// Reads a <see cref="short"/> and advances the position of the stream.
+        /// Reads a string from the stream using <see cref="DefaultEncoding"/>.
         /// </summary>
-        public short ReadInt16() => (short) ReadNumericValue(2);
-        /// <summary>
-        /// Reads an <see cref="ushort"/> and advances the position of the stream.
-        /// </summary>
-        public ushort ReadUInt16() => (ushort) ReadNumericValue(2);
-
-        /// <summary>
-        /// Reads a <see cref="float"/> and advances the position of the stream.
-        /// </summary>
-        public float ReadFloat() => ReadNumericValue(4);
-        /// <summary>
-        /// Reads an <see cref="int"/> and advances the position of the stream.
-        /// </summary>
-        public int ReadInt32() => (int) ReadNumericValue(4);
-        /// <summary>
-        /// Reads an <see cref="uint"/> and advances the position of the stream.
-        /// </summary>
-        public uint ReadUInt32() => (uint) ReadNumericValue(4);
-
-        /// <summary>
-        /// Reads a <see cref="decimal"/> and advances the position of the stream.
-        /// </summary>
-        public decimal ReadDecimal() => ReadNumericValue(8);
-        /// <summary>
-        /// Reads a <see cref="double"/> and advances the position of the stream.
-        /// </summary>
-        public double ReadDouble() => ReadNumericValue(8);
-        /// <summary>
-        /// Reads a <see cref="long"/> and advances the position of the stream.
-        /// </summary>
-        public long ReadInt64() => (long) ReadNumericValue(8);
-        /// <summary>
-        /// Reads an <see cref="ulong"/> and advances the position of the stream.
-        /// </summary>
-        public ulong ReadUInt64() => ReadNumericValue(8);
-
-        /// <summary>
-        /// Reads a <see cref="char"/> and advances the position of the stream.
-        /// </summary>
-        public char ReadChar() => ReadChar(1);
-        /// <summary>
-        /// Reads a <see cref="char"/> with a set length and advances the position of the stream.
-        /// </summary>
-        public char ReadChar(byte byteLength) => (char) ReadNumericValue(byteLength);
-        /// <summary>
-        /// Reads a <see cref="char"/> which has its length taken from the <see cref="Encoding"/> and advances the position of the stream.
-        /// </summary>
-        public char ReadChar(Encoding encoding) => (char) ReadNumericValue((byte) encoding.GetMaxByteCount(1));
-
-        // Strings --------------------
-
         public string ReadString(int length) => ReadString(length, DefaultEncoding);
+
+        /// <summary>
+        /// Reads a string from the stream using a given <see cref="Encoding"/>.
+        /// </summary>
         public string ReadString(int length, Encoding encoding) {
-            string result = encoding.GetString(position, length);
-            position += length;
+            byte[] bytes = Read<byte>(length);
+
+            return encoding.GetString(bytes);
+        }
+
+
+        // Writing ----------------
+
+        /// <summary>
+        /// Writes any given value to the stream taking in mind <see cref="ByteOrder"/>.
+        /// </summary>
+        public void Write<T>(T value) where T : unmanaged {
+            if(typeof(T) != typeof(byte) && // Skip byte (no byte order).
+               (BitConverter.IsLittleEndian != (ByteOrder == ByteOrder.LittleEndian))) { // ByteOrder does not match.
+
+                byte* ptr = (byte*) &value;
+                uint pos = 0;
+
+                bool needsReversion = true;
+
+                FieldInfo[] fields = typeof(T).GetFields();
+                if(fields.Length != 0) {
+                    foreach(FieldInfo field in fields) {
+                        object? child = field.GetValue(value);
+
+                        if(child is null || field.IsLiteral /* (const) */) continue;
+                        needsReversion = false;
+
+                        GCHandle handle = GCHandle.Alloc(child, GCHandleType.Pinned);
+                        byte* childPtr = (byte*) handle.AddrOfPinnedObject();
+
+                        int size = Marshal.SizeOf(child);
+                        for(int i = size - 1; i > -1; i--, pos++)
+                            ptr[pos] = childPtr[i];
+
+                        handle.Free();
+                    }
+                }
+
+                if(needsReversion) {
+                    T temp = value;
+                    byte* tempPtr = (byte*) &temp;
+
+                    for(int i = sizeof(T) - 1, j = 0; i > -1; i--, j++)
+                        ptr[i] = tempPtr[j];
+                }
+
+            }
+
+            Write((byte*) &value, sizeof(T));
+        }
+
+        /// <summary>
+        /// Writes an array to the stream.
+        /// </summary>
+        public void Write<T>(T[] array) where T : unmanaged {
+            foreach(T value in array)
+                Write(value);
+        }
+
+        /// <summary>
+        /// Writes a string to the stream using <see cref="DefaultEncoding"/>.
+        /// </summary>
+        public void Write(string value) => Write(value, DefaultEncoding);
+
+        /// <summary>
+        /// Writes a string to the stream with a set <see cref="Encoding"/>.
+        /// </summary>
+        public void Write(string value, Encoding encoding) => Write(encoding.GetBytes(value));
+
+        /// <summary>
+        /// Writes an object of unknown type to the stream. The length in bytes of this object has to be specified.
+        /// </summary>
+        /// <param name="length">The length in bytes of this object.</param>
+        public void Write(object value, int length) {
+            GCHandle handle = GCHandle.Alloc(value, GCHandleType.Pinned);
+
+            Write((byte*) handle.AddrOfPinnedObject(), length);
+
+            handle.Free();
+        }
+
+        /// <summary>
+        /// Writes a given number of bytes from a pointer. This does not take in mind <see cref="ByteOrder"/>.
+        /// </summary>
+        public void Write(byte* pointer, int length) {
+            for(int i = 0; i < length; i++, Length++)
+                *PointerAt(position++) = pointer[i];
+        }
+
+
+        // Others ----------------
+
+        /// <summary>
+        /// Packs the contents of the stream into a byte array.
+        /// </summary>
+        public byte[] ToArray() {
+            byte[] result = new byte[Length];
+            int index = 0;
+            ulong pos = 0;
+            
+            while(pos < position) {
+                ulong current = Math.Min(Length - blockLength * (uint) index, blockLength);
+
+                Array.Copy(dataBlocks[index], result, (int) current);
+
+                pos += current;
+            }
 
             return result;
         }
-
-        /// <summary>
-        /// Reads a string until a byte matches the given argument. 0 by default.
-        /// </summary>
-        /// <param name="endValue">The byte that will make the reader stop.</param>
-        public string ReadStringUntil(byte endValue = 0x00) => ReadStringUntil(DefaultEncoding, endValue);
-        /// <summary>
-        /// Reads a string until a byte matches the given argument with a set encoding.
-        /// </summary>
-        /// <param name="endValue">The byte that will make the reader stop.</param>
-        public string ReadStringUntil(Encoding encoding, byte endValue = 0x00) {
-            byte* beginning = position;
-            int length = 0;
-
-            while(*position++ != endValue)
-                length++;
-
-            return encoding.GetString(beginning, length);
-        }
-
-        // Arrays ---------------------
-
-        /// <summary>
-        /// Reads an amount of bytes and converts them to bools.
-        /// Note that this will not read bools from bits, use <see cref="ReadFlags(byte)"/> for that instead.
-        /// </summary>
-        public bool[] ReadBoolArray(int amount) => ReadArray(amount, ReadBool);
-
-        /// <summary>
-        /// Reads a <see cref="byte"/> array and advances the position of the stream.
-        /// </summary>
-        public byte[] ReadByteArray(int amount) => ReadArray(amount, ReadByte);
-        /// <summary>
-        /// Reads a <see cref="sbyte"/> array and advances the position of the stream.
-        /// </summary>
-        public sbyte[] ReadSByteArray(int amount) => ReadArray(amount, ReadSByte);
-
-        /// <summary>
-        /// Reads a <see cref="short"/> array and advances the position of the stream.
-        /// </summary>
-        public short[] ReadInt16Array(int amount) => ReadArray(amount, ReadInt16);
-        /// <summary>
-        /// Reads an <see cref="ushort"/> array and advances the position of the stream.
-        /// </summary>
-        public ushort[] ReadUInt16Array(int amount) => ReadArray(amount, ReadUInt16);
-
-        /// <summary>
-        /// Reads a <see cref="float"/> array and advances the position of the stream.
-        /// </summary>
-        public float[] ReadFloatArray(int amount) => ReadArray(amount, ReadFloat);
-        /// <summary>
-        /// Reads an <see cref="int"/> array and advances the position of the stream.
-        /// </summary>
-        public int[] ReadInt32Array(int amount) => ReadArray(amount, ReadInt32);
-        /// <summary>
-        /// Reads an <see cref="uint"/> array and advances the position of the stream.
-        /// </summary>
-        public uint[] ReadUInt32Array(int amount) => ReadArray(amount, ReadUInt32);
-
-        /// <summary>
-        /// Reads a <see cref="double"/> array and advances the position of the stream.
-        /// </summary>
-        public double[] ReadDoubleArray(int amount) => ReadArray(amount, ReadDouble);
-        /// <summary>
-        /// Reads a <see cref="decimal"/> array and advances the position of the stream.
-        /// </summary>
-        public decimal[] ReadDecimalArray(int amount) => ReadArray(amount, ReadDecimal);
-        /// <summary>
-        /// Reads a <see cref="long"/> array and advances the position of the stream.
-        /// </summary>
-        public long[] ReadInt64Array(int amount) => ReadArray(amount, ReadInt64);
-        /// <summary>
-        /// Reads an <see cref="ulong"/> array and advances the position of the stream.
-        /// </summary>
-        public ulong[] ReadUInt64Array(int amount) => ReadArray(amount, ReadUInt64);
-
-        /// <summary>
-        /// Reads a byte array and converts it into <see cref="Flags"/>.
-        /// </summary>
-        /// <param name="byteLength">The amount of bytes to read. Maximum 32.</param>
-        public Flags ReadFlags(byte byteLength = 1) => new(ReadByteArray(byteLength));
-
-
-        // Writing --------------------
-
-        // [Code here]
-
-
-        // Others ---------------------
 
         /// <summary>
         /// Creates a <see cref="SeekTask"/> that returns the stream to its past position once it is disposed.
         /// </summary>
         public SeekTask TemporarySeek() => new(this);
 
+        /// <summary>
+        /// Removes all data within the stream and frees memory.
+        /// </summary>
         public void Dispose() {
+            dataBlocks.Clear();
             GC.SuppressFinalize(this);
-            handleList.ForEach((GCHandle handle) => handle.Free());
         }
 
+        public IEnumerator<byte> GetEnumerator() {
+            for(ulong i = 0; i < Length; i++) {
+                int blockIndex = (int) (i / blockLength);
 
-        // Private --------------------
-
-        private ulong ReadNumericValue(byte byteAmount) {
-            ulong result = 0;
-
-            for(byte i = 0; i < byteAmount; i++)
-                if(BitConverter.IsLittleEndian == (ByteOrder == ByteOrder.LittleEndian)) // ByteOrder matches.
-                    result += (ulong) *position++ << 8 * i;
-                else
-                    result += (ulong) *position++ >> 8 * (byteAmount - 1) - 8 * i;
-
-            return result;
+                yield return dataBlocks[blockIndex][i - (ulong) blockLength * (uint) blockIndex];
+            }
         }
 
-        private T[] ReadArray<T>(int arrayLength, Func<T> numberReader) {
-            T[] array = new T[arrayLength];
-
-            for(int i = 0; i < arrayLength; i++)
-                array[i] = numberReader.Invoke();
-
-            return array;
-        }
+        IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
     }
 
     public enum ByteOrder : ushort {
@@ -289,7 +316,7 @@ namespace NewGear.IO {
 
     public unsafe struct SeekTask : IDisposable {
         private BinaryStream stream;
-        private long position;
+        private ulong position;
 
         internal SeekTask(BinaryStream stream) {
             this.stream = stream;
@@ -300,31 +327,5 @@ namespace NewGear.IO {
         /// Returns the stream to the position it was when this instance was created.
         /// </summary>
         public void Dispose() => stream.Position = position;
-    }
-
-    public struct Flags {
-        private byte[] bytes;
-
-        /// <summary>
-        /// Gets a flag by its index.
-        /// </summary>
-        public bool this[byte index] {
-            get {
-                if(index > bytes.Length * 8)
-                    return false;
-
-                byte byteIndex = (byte) (index / 8);
-                byte bitIndex = (byte) Math.Pow(2, index - 8 * byteIndex);
-
-                return (bytes[byteIndex] & bitIndex) == bitIndex;
-            }
-        }
-
-        public Flags(byte[] bytes) {
-            if(bytes.Length < 1 && bytes.Length > 32)
-                throw new ArgumentOutOfRangeException("The maximum amount of bytes is 32 and it cannot be 0.");
-
-            this.bytes = bytes;
-        }
     }
 }
