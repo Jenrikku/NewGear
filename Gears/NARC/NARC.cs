@@ -1,255 +1,346 @@
-﻿using NewGear.GearSystem.InterfaceGears;
-using NewGear.TrueTree;
-using Syroot.BinaryData;
-using System.Diagnostics;
+﻿using NewGear.GearSystem.Interfaces;
+using NewGear.Trees.TrueTree;
+using NewGear.IO;
 using System.Text;
 
-// Code adapted from NARCSharp (https://github.com/Jenrikku/NARCSharp)
+// Check out this file's format here: https://redpepper.miraheze.org/wiki/NARC
 namespace NewGear.Gears.Containers {
     public class NARC : IContainerGear, IModifiableGear {
         public BranchNode RootNode { get; set; } = new('*') { Metadata = new NARCHeader() };
         public ICompressionGear? CompressionAlgorithm { get; set; }
         public ByteOrder ByteOrder { get; set; }
+        public Encoding Encoding { get; set; } = Encoding.ASCII;
 
-        public static bool Identify(byte[] data) {
-            return Encoding.ASCII.GetString(data[0..4]) == "NARC";
-        }
-
-        public void Read(Stream stream, Encoding encoding, bool leaveOpen = false) {
-            using BinaryDataReader reader = new(stream, encoding, leaveOpen);
-
-            // Magic check:
-            if(reader.ReadString(4) != "NARC")
-                throw new InvalidDataException("The given file is not a NARC.");
-
-            // Reads the byte order and changes the one used by the reader if needed:
-            ByteOrder = (ByteOrder) reader.ReadUInt16();
-            reader.ByteOrder = ByteOrder;
-
-            // Prevention of outside modifications.
-            if(RootNode.Metadata is not NARCHeader)
-                RootNode.Metadata = new NARCHeader();
-
-            RootNode.Metadata.Version = reader.ReadUInt16();
-
-            reader.Position += 4; // Length skip (calculated when writing).
-
-            {
-                bool headerCheck = reader.ReadUInt16() == 16;
-                bool entryCountCheck = reader.ReadUInt16() == 3;
-
-                Debug.Assert(headerCheck);     // Header length check.
-                Debug.Assert(entryCountCheck); // Entry count check.
-
-                bool bfatMagicCheck = reader.ReadString(4) == "BTAF";
-
-                Debug.Assert(bfatMagicCheck); // BFAT magic check.
-            }
-
-            // The positions where the sections' reading was left last time.
-            long bfatIndex = reader.Position + 8;
-            long bfntIndex = reader.Position + reader.ReadUInt32() - 4; // From the BFAT length.
-            long fimgIndex;
-
-            uint fileCount = reader.ReadUInt32();
-
-            uint currentFileOffset;
-            uint currentFileEnd;
-
-            #region BFNT preparations
-            reader.Position = bfntIndex;
-
-            {
-                bool bfntMagicCheck = reader.ReadString(4) == "BTNF";
-                Debug.Assert(bfntMagicCheck); // BFNT magic check.
-            }
-
-            fimgIndex = reader.Position + reader.ReadUInt32() - 4; // Sets FIMG section begining.
-
-            using(reader.TemporarySeek()) {
-                reader.Position = fimgIndex;
-
-                bool fimgMagicCheck = reader.ReadString(4) == "GMIF";
-
-                Debug.Assert(fimgMagicCheck); // FIMG magic check.
-                fimgIndex += 8; // Skips magic and length.
-            }
-
-            uint bfntUnknownLength = reader.ReadUInt32() - 4;
-
-            RootNode.Metadata.bfntUnknown = new byte[bfntUnknownLength];
-            for(int i = 0; i < bfntUnknownLength; i++)
-                RootNode.Metadata.bfntUnknown[i] = reader.ReadByte();
-            #endregion
-
-            BranchNode currentFolder = RootNode;
-            for(int i = 0; i < fileCount; i++) {
-                byte nameLength = reader.ReadByte();
-
-                if(nameLength == 0x00) { // End of the "folder".
-                    currentFolder = currentFolder.Parent ?? currentFolder;
-                    i--;
-                    continue;
-                }
-
-                if(nameLength >= 0x80) { // If it is a "folder".
-                    BranchNode childFolder = new(reader.ReadString(nameLength & 0x7F));
-
-                    currentFolder = (BranchNode) currentFolder.AddChild(childFolder);
-
-                    reader.Position += 2;
-                    i--;
-                    continue;
-                }
-
-                // Read BFAT section:
-                using(reader.TemporarySeek()) {
-                    reader.Position = bfatIndex;
-
-                    currentFileOffset = reader.ReadUInt32();
-                    currentFileEnd = reader.ReadUInt32();
-
-                    bfatIndex = reader.Position;
-                }
-
-                LeafNode child = new(reader.ReadString(nameLength));
-
-                // Read FIMG section:
-                using(reader.TemporarySeek()) {
-                    reader.Position = fimgIndex + currentFileOffset;
-                    child.Contents = reader.ReadBytes((int) (currentFileEnd - currentFileOffset));
-                }
-
-                currentFolder.AddChild(child);
-            }
-        }
-
-        public void Write(Stream stream, Encoding encoding, bool leaveOpen = false) {
-            using BinaryDataWriter writer = new(stream, encoding, leaveOpen) {
-                ByteOrder = ByteOrder
+        public void Read(byte[] data) {
+            using BinaryStream stream = new(data) { 
+                ByteOrder = ByteOrder.BigEndian,
+                DefaultEncoding = Encoding
             };
 
-            #region Header
-            writer.Write("NARC",
-                BinaryStringFormat.NoPrefixOrTermination); // Magic string.
-            writer.Write((ushort) 0xFFFE);                 // Byte order.
-            writer.Write(RootNode.Metadata?.Version);      // Version.
-            writer.Position += 4;                          // Length skip. (calculated later)
-            writer.Write((ushort) 0x10);                   // Header length.
-            writer.Write((ushort) 0x03);                   // Section count.
-            #endregion
+            // Header ----------------
 
-            #region BFAT (pre)
-            writer.Write("BTAF",
-                BinaryStringFormat.NoPrefixOrTermination); // Magic string.
+            if(stream.ReadString(4) != "NARC") // Magic check.
+                throw new InvalidDataException("The given file is not a NARC.");
 
-            long bfatLengthIndex = writer.Position; // For calculation the position later.
+            // Reads the byte order and changes the one used by the stream if required:
+            ByteOrder = stream.Read<ByteOrder>();
+            stream.ByteOrder = ByteOrder;
 
-            writer.Position += 4; // Length skip. (calculated later)
+            // Replaces the header:
+            RootNode.Metadata = new NARCHeader() { 
+                Version = stream.Read<ushort>()
+            };
 
-            List<byte[]> fileContainer = new(); // Contains all the files without "folders".
-            FolderIterate(RootNode);
+            stream.Position += 4; // Length skip (calculated when writing).
 
-            writer.Write(fileContainer.Count);               // Number of files. (hash pairs)
-            writer.Write(new byte[fileContainer.Count * 8]); // Reserve hashes' positions.
-            #endregion
+            // Reserved values (should be constant)
+            RootNode.Metadata.Reserved0 = stream.Read<ushort>(); // 16 (Header length)
+            RootNode.Metadata.Reserved1 = stream.Read<ushort>(); // 3  (Section / block count)
 
-            #region BFNT
-            writer.Write("BTNF",
-                BinaryStringFormat.NoPrefixOrTermination); // Magic string.
+            // FATB ----------------
 
-            long bfntLengthIndex = writer.Position; // For calculation the position later.
+            if(stream.ReadString(4) != "BTAF") // Magic check.
+                throw new InvalidDataException("The FATB section was not found. The file may be corrupted.");
 
-            writer.Position += 4;                                    // Length skip. (calculated later)
-            writer.Write(RootNode.Metadata?.bfntUnknown.Length + 4); // Unknown data length.
-            writer.Write(RootNode.Metadata?.bfntUnknown);            // Unknown data.
+            // Calculates the beginning of the next section:
+            ulong fntbBeginning = stream.Position - 4 + stream.Read<uint>();
 
-            byte folderCount = 1;
-            WriteBFNTEntry(RootNode); // Write all BFNT entries recursively.
+            uint fatbCount = stream.Read<uint>(); // Amount of hashes
 
-            writer.Align(128); // Alignment required for proper reading.
-            #endregion
+            // startPos -> The starting position of the file.
+            // endPos   -> The ending position of the file.
+            // Both positions are relative to the FIMG section, right after the length.
+            // Each entry in the array describes a file's boundary.
+            (uint startPos, uint endPos)[] positions = new (uint, uint)[fatbCount];
 
-            #region FIMG & BFAT
-            writer.Write("GMIF",
-                BinaryStringFormat.NoPrefixOrTermination); // Magic string.
+            for(uint i = 0; i < fatbCount; i++) // Reads all hashes.
+                positions[i] = (stream.Read<uint>(), stream.Read<uint>());
 
-            long fimgLengthIndex = writer.Position;
+            // FNTB ----------------
 
-            writer.Position += 4; // Length skip (calculated later)
+            // Moves the stream to the beginning of this section:
+            stream.Position = fntbBeginning;
 
-            long bfatIndex = 0x1C; // BFAT current position.
-            foreach(byte[] entry in fileContainer) {
-                uint currentOffset =
-                    (uint) (writer.Position - fimgLengthIndex - 4); // BFAT pair first entry.
+            if(stream.ReadString(4) != "BTNF") // Magic check.
+                throw new InvalidDataException("The FNTB section was not found. The file may be corrupted.");
 
-                writer.Write(entry); // File contents.
+            // Calculates the beginning of the next section:
+            ulong fimgBeginning = stream.Position - 4 + stream.Read<uint>();
 
-                using(writer.TemporarySeek()) {
-                    writer.Position = bfatIndex;
-                    writer.Write(currentOffset); // Relative offset of the file to the FIMG section.
-                    writer.Write((uint) (currentOffset + entry.Length)); // Relative end of the file to the FIMG section.
+            ulong dirEntriesStart = stream.Position; // The start of the directory entries array. Constant.
+            ulong dirEntriesPos = stream.Position;   // The current position within the directory entries array.
 
-                    bfatIndex += 8; // Update bfatIndex.
-                }
+            ReadDirectory(RootNode);
 
-                writer.Align(128); // Alignment required for proper reading.
-            }
-            #endregion
+            // Called each time a directory is found.
+            // The stream's position is within the directory entries array.
+            void ReadDirectory(BranchNode dir) {
+                // The start position of the directory within the name array.
+                ulong startPosition = dirEntriesStart + stream.Read<uint>();
 
-            #region Sections' length
-            writer.Position = bfatLengthIndex;
-            writer.Write((uint) (bfntLengthIndex - bfatLengthIndex)); // BFAT length.
+                // Advances the position within the directory entries array.
+                dirEntriesPos = stream.Position + 4;
 
-            writer.Position = bfntLengthIndex;
-            writer.Write((uint) (fimgLengthIndex - bfntLengthIndex)); // BFNT length.
+                // Sets the stream's position to the directory's start point.
+                stream.Position = startPosition;
 
-            writer.Position = fimgLengthIndex;
-            writer.Write((uint) (writer.BaseStream.Length - fimgLengthIndex)); // FIMG length.
+                while(stream.Peek() != 0) { // 0 means that the end of the directory has been reached.
+                    byte length = stream.Read<byte>(); // Names are length-prefixed.
 
-            writer.Position = 0x08;
-            writer.Write((uint) writer.BaseStream.Length); // NARC total length.
-            #endregion
+                    if(length >= 0b10000000) { // Directory.
+                        length = (byte) (length & 0b01111111); // Removes the first bit from the length.
 
+                        // Creates a new branch node with the directory's name. 
+                        BranchNode childDir = new(stream.ReadString(length));
 
-            void FolderIterate(BranchNode branchNode) {
-                foreach(INode node in branchNode) {
-                    if(node is BranchNode subBranchNode) // If it is a "folder" then iterate through it.
-                        FolderIterate(subBranchNode);
-                    else                                 // If it is a file then add its content to the list.
-                        fileContainer.Add(node.Metadata);
+                        using(stream.TemporarySeek()) {
+                            stream.Position = dirEntriesPos; // Goes back to the directory entries array.
+                            ReadDirectory(childDir); // Reads the child directory.
+                        } // Return to the past position.
+
+                        stream.Position += 2; // Skips directory ID and 0xF0 const.
+
+                        dir.AddChild(childDir); // Adds the child to its parent.
+                    } 
+                    else // Reads a file and adds it directly to its parent directory.
+                        dir.AddChild(new LeafNode(stream.ReadString(length)));
                 }
             }
 
-            void WriteBFNTEntry(BranchNode entry) {
-                foreach(INode node in entry) {
-                    if(node is BranchNode branchNode) { // If it is a "folder".
-                        writer.Write((byte) (node.ID.Length + 0x80));  // ID's length.
-                        writer.Write(node.ID,
-                            BinaryStringFormat.NoPrefixOrTermination); // ID.
-                        writer.Write(folderCount++);                   // Folder id. (count)
-                        writer.Write((byte) 0xF0);                     // Constant.
+            // FIMG ----------------
 
-                        WriteBFNTEntry(branchNode);
-                    } else {
-                        writer.Write(node.ID); // File name.
+            // Moves the stream to the beginning of this section:
+            stream.Position = fimgBeginning;
+
+            if(stream.ReadString(4) != "GMIF") // Magic check.
+                throw new InvalidDataException("The FIMG section was not found. The file may be corrupted.");
+
+            stream.Position += 4; // Length skip.
+
+            uint index = 0; // The file index. Used to get the right hash from the FATB section.
+            IterateDirectory(RootNode);
+
+            // Reads a directory by iterating through all child nodes in it.
+            void IterateDirectory(BranchNode dir) {
+                // Because of how NARC files are often written, files have to be read before child directories.
+
+                foreach(LeafNode file in dir.ChildLeaves) { // Reads files.
+                    (uint startPos, uint endPos) = positions[index++]; // Gets the current hash.
+
+                    using(stream.TemporarySeek()) {
+                        stream.Position += startPos; // Sets the position to the file's beginning.
+
+                        // Reads the file's contents.
+                        // The size is calculated by subtracting the starting position to the end position.
+                        file.Contents = stream.Read<byte>((int) (endPos - startPos));
+                    } // Return to the past position.
+                }
+
+                foreach(BranchNode childDir in dir.ChildBranches) // Reads child directories.
+                    IterateDirectory(childDir);
+            }
+        }
+
+        public byte[] Write() {
+            using BinaryStream stream = new(0xFF) {
+                ByteOrder = ByteOrder,
+                DefaultEncoding = Encoding
+            };
+
+            // Header ----------------
+
+            stream.Write("NARC");                               // Magic.
+            stream.Write<ushort>(0xFFFE);                       // Endian.
+            stream.Write<ushort>(RootNode.Metadata?.Version);   // Version.
+            
+            stream.Position += 4;                               // Length skip.
+
+            stream.Write<ushort>(RootNode.Metadata?.Reserved0); // Header length. (16)
+            stream.Write<ushort>(RootNode.Metadata?.Reserved1); // Section count. (3)
+
+            // FATB ----------------
+
+            stream.Write("BTAF"); // Magic.
+
+            uint count = 0; // Amount of files. (hash count)
+
+            CountFiles(RootNode);
+
+            // Goes thourgh all files inside the given directory and all its children:
+            void CountFiles(BranchNode dir) {
+                foreach(LeafNode file in dir.ChildLeaves)
+                    count++;
+
+                foreach(BranchNode childDir in dir.ChildBranches)
+                    CountFiles(childDir);
+            }
+
+            stream.Write(count * 8 + 12); // Section length.
+
+            stream.Write(count); // Hash count.
+
+            // The current position inside the hash array. Used when writing file contents.
+            uint fbatHashPos = (uint) stream.Position;
+
+            // Reserve spaces to put hashes later:
+            stream.Position += count * 8;
+
+            // FNTB ----------------
+            
+            uint fntbStartPos = (uint) stream.Position; // FNTB start position. (before magic)
+
+            stream.Write("BTNF"); // Magic.
+
+            stream.Position += 4; // Length skip.
+
+            uint dirEntriesStart = (uint) stream.Position;   // The start of the directory entries array. Constant.
+            uint dirEntriesPos = (uint) stream.Position + 8; // The current position within the directory entries array.
+            uint dirEntriesLength = 8;                       // The length of the directory entries array.
+
+            FindChildDirectories(RootNode);
+            
+            // Finds all child directories in order to calculate the directory entries array:
+            void FindChildDirectories(BranchNode dir) {
+                foreach(BranchNode child in dir.ChildBranches) {
+                    FindChildDirectories(child); // Searches for more directories inside the child.
+                    dirEntriesLength += 8;
+                }
+            }
+
+            // The length of the directory entries array is also the root's offset.
+            stream.Write(dirEntriesLength);
+
+            // No files before (always constant in the root directory):
+            stream.Write<ushort>(0);
+
+            // Amount of children directories:
+            stream.Write((ushort) (RootNode.ChildBranches.Count + 1));
+
+            // Reserve space for directory entries:
+            stream.Position += dirEntriesLength - 8;
+
+            // Write names:
+
+            byte directoryID = 0;  // Increases by one each time a directory's name has been written.
+            ushort fileAmount = 0; // Increases by one each time a file's name has been written.
+
+            WriteNames(RootNode);
+
+            // Writes all names and also goes back and writes directory entries when required:
+            void WriteNames(BranchNode dir) {
+                // Names:
+                foreach(INode node in dir) {
+                    if(node is BranchNode) { // Directory names.
+                        stream.Write((byte) (node.ID.Length + 0b10000000)); // Name length. (8th bit set to 1)
+                        stream.Write((string) node.ID);                     // Name.
+                        stream.Write(++directoryID);                        // Directory ID.
+                        stream.Write<byte>(0xF0);                           // Constant byte. (0xF0)
+                    } else {                 // Filenames.
+                        stream.Write((byte) node.ID.Length);                // Name length.
+                        stream.Write((string) node.ID);                     // Name.
+
+                        fileAmount++;
                     }
                 }
 
-                writer.Write((byte) 0x00); // End of "folder".
+                stream.Write<byte>(0); // End-of-directory byte.
+
+                // Directory entries:
+                foreach(BranchNode node in dir.ChildBranches) {
+                    // The relative position of the current position to the beginning of the directory entries array.
+                    uint nameSectionRelPos = (uint) stream.Position - dirEntriesStart;
+
+                    using(stream.TemporarySeek()) {
+                        // Sets the position to the beginning of the directory entries array.
+                        stream.Position = dirEntriesPos;
+
+                        stream.Write(nameSectionRelPos); // Offset to the directoriy's beginning inside the names array.
+                        stream.Write(fileAmount);        // Amount of files present before this directory.
+
+                        ushort childCount = (ushort) node.ChildBranches.Count; // Amount of child directories.
+
+                        // Amount of children directories, counting the parent itself. (+1)
+                        // 0xF000 if none.
+                        stream.Write((ushort) (childCount == 0 ? 0xF000 : childCount + 1));
+
+                        dirEntriesPos += 8; // Advances the current position within the directory entries array.
+                    } // Return to the past position.
+
+                    WriteNames(node); // Write the names of this directory's children.
+                }
             }
+
+            stream.Align(128); // Alignment to the FIMG section.
+
+            using(stream.TemporarySeek()) {
+                // Calculates the FNTB section's length by taking in mind its starting point:
+                uint fntbLength = (uint) (stream.Position - fntbStartPos);
+
+                stream.Position = fntbStartPos + 4; // Goes to the FNTB's length position.
+                stream.Write(fntbLength);           // FNTB section's length.
+            } // Return to the FIMG section's beginning.
+
+            // FIMG ----------------
+
+            uint fimgStartPos = (uint) stream.Position; // FIMG start position. (before magic)
+
+            stream.Write("GMIF"); // Magic
+
+            stream.Position += 4; // Length skip.
+
+            WriteFileData(RootNode);
+
+            // Writes file contents and also FATB's hashes:
+            void WriteFileData(BranchNode dir) {
+                foreach(LeafNode file in dir.ChildLeaves) { // Files within the directory.
+                    // FATB hash values, both relatives to the position after the FIMG's length:
+                    uint fileStart = (uint) stream.Position - (fimgStartPos + 8);
+                    uint fileEnd;
+
+                    stream.Write((byte[]) (file.Contents ?? Array.Empty<byte>())); // File contents.
+
+                    fileEnd = (uint) stream.Position - (fimgStartPos + 8); // Calculates file's end.
+
+                    using(stream.TemporarySeek()) {
+                        stream.Position = fbatHashPos; // Goes to the current position within the hash array.
+
+                        stream.Write(fileStart); // File's start. 
+                        stream.Write(fileEnd);   // File's end.
+
+                        fbatHashPos += 8; // Advances the position within the hash array.
+                    } // Return to the past position.
+
+                    stream.Align(128); // Align to the next file.
+                }
+
+                foreach(BranchNode childDir in dir.ChildBranches)
+                    WriteFileData(childDir); // Files within child directories.
+            }
+
+            uint fimgLength = (uint) (stream.Position - fimgStartPos); // Calculate FIMG section's length.
+
+            stream.Position = fimgStartPos + 4; // Goes to the FIMG's length position.
+            stream.Write(fimgLength);           // FIMG's section length.
+
+            // ----------------
+
+            stream.Position = 8; // Goes back to the file's length position.
+
+            stream.Write((uint) stream.Length); // Writes the file's length.
+
+            return stream.ToArray();
         }
 
         public struct NARCHeader {
             public NARCHeader() {
                 Version = 0x0100;
-                bfntUnknown = new byte[] {
-                    0x00, 0x00, 0x01, 0x00
-                };
+                Reserved0 = 16;
+                Reserved1 = 3;
             }
 
             public ushort Version;
-            public byte[] bfntUnknown;
+            public ushort Reserved0; // Header length.
+            public ushort Reserved1; // Section (block) count.
         }
     }
 }

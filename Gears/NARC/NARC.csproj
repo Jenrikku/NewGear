@@ -16,7 +16,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\Gear System\Gear System.csproj" />
-    <PackageReference Include="Syroot.IO.BinaryData" Version="2.0.1" />
   </ItemGroup>
 
 </Project>
