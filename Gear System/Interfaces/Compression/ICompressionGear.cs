@@ -1,4 +1,4 @@
-﻿namespace NewGear.GearSystem.InterfaceGears {
+﻿namespace NewGear.GearSystem.Interfaces {
     public interface ICompressionGear : IGear {
         /// <summary>
         /// The level of compression used.
@@ -17,12 +17,12 @@
         /// <summary>
         /// Compresses a byte array.
         /// </summary>
-        public byte[] Compress(byte[] data) => Compress(new MemoryStream(data));
+        public virtual byte[] Compress(byte[] data) => Compress(new MemoryStream(data));
 
         /// <summary>
         /// Compresses the contents of the file and returns it as a byte array. The actual file is not modified.
         /// </summary>
-        public byte[] Compress(string filename) => Compress(new MemoryStream(File.ReadAllBytes(filename)));
+        public virtual byte[] Compress(string filename) => Compress(new MemoryStream(File.ReadAllBytes(filename)));
 
         #endregion
 
@@ -37,12 +37,12 @@
         /// <summary>
         /// Decompresses a byte array.
         /// </summary>
-        public byte[] Decompress(byte[] data) => Decompress(new MemoryStream(data));
+        public virtual byte[] Decompress(byte[] data) => Decompress(new MemoryStream(data));
 
         /// <summary>
         /// Decompresses the contents of the file and returns it as a byte array. The actual file is not modified.
         /// </summary>
-        public byte[] Decompress(string filename) => Decompress(new MemoryStream(File.ReadAllBytes(filename)));
+        public virtual byte[] Decompress(string filename) => Decompress(new MemoryStream(File.ReadAllBytes(filename)));
 
         #endregion
     }
