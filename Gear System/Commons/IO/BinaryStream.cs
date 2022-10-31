@@ -1,4 +1,5 @@
 ﻿using System.Collections;
+using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -123,16 +124,22 @@ namespace NewGear.IO {
             if(typeof(T) != typeof(byte) && // Skip byte (no byte order).
                (!BitConverter.IsLittleEndian != (ByteOrder == ByteOrder.BigEndian))) { // ByteOrder does not match.
 
-                FieldInfo[] fields = typeof(T).GetFields();
-                if(fields.Length != 0) {
-                    foreach(FieldInfo field in fields) {
+                if(!typeof(T).IsPrimitive && !typeof(T).IsEnum) {
+                    foreach(FieldInfo field in typeof(T).GetFields()) {
                         if(field.IsLiteral /* (const) */) continue;
                         needsReading = false;
 
-                        int fieldSize = Marshal.SizeOf(field.FieldType);
+                        int fieldSize;
 
-                        for(int i = fieldSize - 1; i > -1; i++)
+                        if(field.FieldType.IsEnum)
+                            fieldSize = Marshal.SizeOf(Enum.GetUnderlyingType(field.FieldType));
+                        else
+                            fieldSize = Marshal.SizeOf(field.FieldType);
+
+                        for(int i = fieldSize - 1; i > -1; i--)
                             bytes[i + pos] = *PointerAt(position++);
+
+                        pos += fieldSize;
                     }
                 }
 
@@ -149,7 +156,10 @@ namespace NewGear.IO {
                 for(int i = 0; i < bytes.Length; i++)
                     bytes[i] = *PointerAt(position++);
 
-            return *(T*) Marshal.UnsafeAddrOfPinnedArrayElement(bytes, 0);
+            //Debug.Assert(typeof(T).Name != "Field");
+
+            fixed(byte* ptr = bytes)
+                return *(T*) ptr;
         }
 
         /// <summary>
@@ -178,6 +188,23 @@ namespace NewGear.IO {
             return encoding.GetString(bytes);
         }
 
+        /// <summary>
+        /// Reads a string that ends with a given byte (0 by default).
+        /// </summary>
+        public string ReadStringUntil(byte end = 0x00) => ReadStringUntil(DefaultEncoding, end);
+
+        /// <summary>
+        /// Reads a string that ends with a given byte using a given <see cref="Encoding"/>.
+        /// </summary>
+        public string ReadStringUntil(Encoding encoding, byte end = 0x00) {
+            int length = 0;
+
+            while(*PointerAt(position++) != end)
+                length++;
+
+            return encoding.GetString(PointerAt(position - (uint) length - 1), length);
+        }
+
 
         // Writing ----------------
 
@@ -193,9 +220,8 @@ namespace NewGear.IO {
 
                 bool needsReversion = true;
 
-                FieldInfo[] fields = typeof(T).GetFields();
-                if(fields.Length != 0) {
-                    foreach(FieldInfo field in fields) {
+                if(!typeof(T).IsPrimitive && !typeof(T).IsEnum) {
+                    foreach(FieldInfo field in typeof(T).GetFields()) {
                         object? child = field.GetValue(value);
 
                         if(child is null || field.IsLiteral /* (const) */) continue;
@@ -289,6 +315,23 @@ namespace NewGear.IO {
         /// Creates a <see cref="SeekTask"/> that returns the stream to its past position once it is disposed.
         /// </summary>
         public SeekTask TemporarySeek() => new(this);
+
+        /// <summary>
+        /// Checks what the next byte is without moving the position.
+        /// </summary>
+        public byte Peek() => *PointerAt(position);
+
+        /// <summary>
+        /// Sets the position of the stream to a multiple of the given number.
+        /// </summary>
+        public void Align(uint amount) {
+            if(position % amount == 0)
+                return; // The stream is aligned already.
+
+            uint last = (uint) (position / amount);
+
+            Position = amount * ++last;
+        }
 
         /// <summary>
         /// Removes all data within the stream and frees memory.
