@@ -8,8 +8,12 @@ using static NewGear.MainMachine.GUI.MainWindow;
 
 namespace NewGear.MainMachine.GUI.WindowSystem.Windows {
     internal class Viewport : ImGUIWindow {
+        public FileInstance LinkedFile { get; set; }
+
         private Camera3D camera = new(new(0, 2, -10), new(), Vector3.UnitY, 60, CameraProjection.CAMERA_PERSPECTIVE);
         private Vector3 cameraDirection = new(0, 0, 1);
+
+        public Viewport(FileInstance file) => LinkedFile = file;
 
         public void Render() {
             // Draw ViewportTexture:
@@ -36,13 +40,17 @@ namespace NewGear.MainMachine.GUI.WindowSystem.Windows {
 
             // Update:
 
-            ImGui.SetNextWindowSize(new(500, 350), ImGuiCond.FirstUseEver);
-            ImGui.Begin("Viewport", ref OpenedWindows[1]);
+            if(FileManager.CurrentFile?.ActiveFile is not null)
+                ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(0, 0));
 
-            //if(FileManager.CurrentFile?.CurrentSubFile is null) {
-            //    ImGui.TextDisabled("There is no model data to show.");
-            //    return;
-            //}
+            ImGui.Begin("Viewport", ref WindowManager.WindowOpenedStates[(int) WindowManager.WindowType.Viewport]);
+
+            if(FileManager.CurrentFile?.ActiveFile is null) {
+                ImGui.BeginDisabled();
+                ImGui.TextWrapped("Select an item to see it in the viewport.");
+                ImGui.EndDisabled();
+                return;
+            }
 
             // Draw Viewport:
 
@@ -55,7 +63,13 @@ namespace NewGear.MainMachine.GUI.WindowSystem.Windows {
 
             ImGui.Image((IntPtr) ViewportTexture.texture.id, size, new(0, 1), new(1, 0));
 
+            ImGui.PopStyleVar();
+
             // Input:
+
+            if(ImGui.IsMouseHoveringRect(ImGui.GetWindowContentRegionMin(), ImGui.GetWindowContentRegionMax()))
+                if(ImGui.IsMouseClicked(ImGuiMouseButton.Right))
+                    ImGui.SetWindowFocus();
 
             if(ImGui.IsWindowFocused()) {
                 Vector3 right = Vector3.Cross(cameraDirection, camera.up) * 0.1f;
@@ -121,6 +135,8 @@ namespace NewGear.MainMachine.GUI.WindowSystem.Windows {
                     cameraDirection.Y -= mouseDelta.Y * 0.001f;
 
                     cameraDirection = Vector3.Normalize(cameraDirection);
+
+                    ImGui.SetWindowFocus();
                 }
 
                 // Orthographic perspective

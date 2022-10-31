@@ -18,7 +18,7 @@ namespace NewGear.MainMachine.GUI {
 
             void CheckColorMode() {
                 int value = ((int?) Registry.GetValue(ColorThemeKey, ColorThemeValue, 0)) ?? 0;
-                value = value == 0 ? 1 : 0;
+                value = value == 1 ? 0 : 1;
 
                 if(!DwmSetWindowAttribute(handle, 20, value, sizeof(int)))
                     DwmSetWindowAttribute(handle, 19, value, sizeof(int));

@@ -8,6 +8,8 @@
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Version>0.0.1</Version>
+    <AssemblyName>NewGear</AssemblyName>
+    <Authors>Jenrikku (JkKU)</Authors>
     <RunPostBuildEvent>OnBuildSuccess</RunPostBuildEvent>
   </PropertyGroup>
 
@@ -16,8 +18,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="ImGui.NET" Version="1.87.3" />
-    <PackageReference Include="Raylib-cs" Version="4.0.0.1" />
+    <PackageReference Include="ImGui.NET" Version="1.88.0" />
+    <PackageReference Include="Raylib-cs" Version="4.2.0.1" />
     <PackageReference Include="TinyDialogsNet" Version="1.1.1" />
   </ItemGroup>
 

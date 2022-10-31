@@ -1,39 +1,32 @@
-﻿using NewGear.GearSystem;
-using NewGear.GearSystem.InterfaceGears;
-using NewGear.TrueTree;
-using System.Reflection;
-using TinyDialogsNet;
+﻿using NewGear.GearSystem.GearLoading;
+using NewGear.GearSystem.Interfaces;
+using NewGear.MainMachine.GUI;
+using NewGear.Trees.TrueTree;
+using System.Collections.ObjectModel;
 
 namespace NewGear.MainMachine.FileSystem {
-    internal delegate void FileSystemEvent();
-
     internal static class FileManager {
         /// <summary>
-        /// An event called each time <see cref="CurrentFile"/> is changed.
+        /// Used to switch between currently loaded files.
         /// </summary>
-        public static event FileSystemEvent? FileChanged;
+        public static ObservableCollection<FileInstance> LoadedFiles { get; } = new();
 
+        private static FileInstance? _currentFile;
         /// <summary>
-        /// Used to switch between the currently loaded files.
+        /// Specifies the file that it is being worked on.
         /// </summary>
-        public static List<INode> LoadedFiles { get; set; } = new();
-
-        private static INode? _currentFile;
-        /// <summary>
-        /// Specifies the file that is being shown in the editor.
-        /// </summary>
-        public static INode? CurrentFile {
+        public static FileInstance? CurrentFile {            
             get { return _currentFile; }
-            set {
+            set { 
                 _currentFile = value;
-                FileChanged?.Invoke();
+                CurrentFileChanged?.Invoke();
             }
         }
 
         /// <summary>
-        /// Refers to the file that has been selected within a container.
+        /// An event that is triggered when the current file is changed.
         /// </summary>
-        public static INode? SelectedFile { get; set; }
+        public static event Action? CurrentFileChanged;
 
         /// <summary>
         /// Used to load new files. It is called from multiple methods.
@@ -45,66 +38,64 @@ namespace NewGear.MainMachine.FileSystem {
                 try {
                     buffer = File.ReadAllBytes(filename);
                 } catch {
-                    Dialogs.MessageBox(
-                        buttons: Dialogs.MessageBoxButtons.Ok,
-                        iconType: Dialogs.MessageBoxIconType.Error,
-                        defaultButton: Dialogs.MessageBoxDefaultButton.OkYes,
-                        message: $"The file \"{filename}\" cannot be opened."
-                        );
+                    DialogSystem.OpenMessageDialog(
+                        "Error!",
+                        $"The file \"{filename}\" could not be opened.");
+                    continue;
                 }
 
-                IDataGear? gear = GetGear(buffer);
+                IDataGear? gear = GetGear(filename, buffer);
 
                 if(gear is null) { // File not recognized.
-                    Dialogs.MessageBox(
-                        Dialogs.MessageBoxButtons.Ok,
-                        Dialogs.MessageBoxIconType.Error,
-                        Dialogs.MessageBoxDefaultButton.OkYes,
-                        filename,
-                        "The file cannot be opened by any of the available libraries.");
+                    DialogSystem.OpenMessageDialog(
+                        "File not compatible.",
+                        $"The file \"{filename}\" cannot be opened by any of the available libraries.");
                     continue;
                 }
 
                 if(gear is IContainerGear container) {
-                    BranchNode root = ReadFilesRecursively(container.RootNode, Path.GetFileName(filename));
+                    BranchNode root = ReadFilesRecursively(container.RootNode, Path.GetFileName(filename), container);
 
-                    root.Metadata = new LoadedFileProperties(filename);
                     root.Contents = gear;
 
-                    LoadedFiles.Add(root);
-                } 
-                else
-                    LoadedFiles.Add(new LeafNode(Path.GetFileName(filename)) {
-                        Metadata = new LoadedFileProperties(filename),
-                        Contents = gear
-                    });
+                    LoadedFiles.Add(new(root, filename));
+                } else
+                    LoadedFiles.Add(new(
+                        new LeafNode(Path.GetFileName(filename)) {
+                            Contents = gear
+                        },
+                        filename));
             }
 
             // Switch the current file to the newest:
             if(LoadedFiles.Count > 0)
                 CurrentFile = LoadedFiles.Last();
 
-            BranchNode ReadFilesRecursively(BranchNode node, dynamic id) {
+            BranchNode ReadFilesRecursively(BranchNode node, dynamic id, IGear containerGear) {
                 BranchNode root = new(id);
 
                 foreach(INode child in node) {
                     if(child is BranchNode branchNode) {
-                        BranchNode nextRoot = ReadFilesRecursively(branchNode, branchNode.ID);
+                        BranchNode nextRoot = ReadFilesRecursively(branchNode, branchNode.ID, containerGear);
 
                         nextRoot.LinkedNode = branchNode;
                         root.AddChild(nextRoot);
                     }
-                    
+
                     if(child is LeafNode leafNode) {
-                        IDataGear gear = GetGear(leafNode.Contents);
-                        
-                        if(gear is IContainerGear container)
-                            root.AddChild(ReadFilesRecursively(container.RootNode, child.ID));
-                        else
-                            root.AddChild(new LeafNode(leafNode.ID) {
-                                LinkedNode = leafNode,
-                                Contents = gear
-                            });
+                        if(containerGear is not ISpecialContainerGear) {
+                            IDataGear gear = GetGear(child.ID is string ? child.ID : string.Empty, leafNode.Contents);
+
+                            if(gear is IContainerGear container)
+                                root.AddChild(ReadFilesRecursively(container.RootNode, child.ID, gear));
+                            else
+                                root.AddChild(new LeafNode(leafNode.ID) {
+                                    LinkedNode = leafNode,
+                                    Contents = gear
+                                });
+                        } else
+                            // If the gear is an special container, the contents inside it will not be identified using GetGear():
+                            root.AddChild(leafNode);
                     }
                 }
 
@@ -112,76 +103,74 @@ namespace NewGear.MainMachine.FileSystem {
             }
         }
 
-        public static IDataGear? GetGear(byte[] buffer) {
-            ICompressionGear? compressionAlgorithm = null;
-
-            if(buffer is null)
-                return null;
-
-            #region Compression
-
-            foreach(Type type in GearLoader.LoadedCompressionGears) {
-                MethodInfo? identiyMethod = type.GetMethod("Identify");
-
-                if(identiyMethod is null)
-                    continue; // If it cannot be identified, it is skipped.
-
-                bool? success = (bool?) identiyMethod.Invoke(null, new object[] { buffer });
-
-                if(success.HasValue && success.Value) {
-                    compressionAlgorithm = (ICompressionGear) type.GetConstructors()[0].Invoke(null);
-                    buffer = compressionAlgorithm.Decompress(buffer);
-                }
-            }
-
-            #endregion
-
-            #region Data
-
-            foreach(Type type in GearLoader.LoadedDataGears) {
-                MethodInfo? identiyMethod = type.GetMethod("Identify");
-
-                if(identiyMethod is null)
-                    continue; // If it cannot be identified, it is skipped.
-
-                bool? success = (bool?) identiyMethod.Invoke(null, new object[] { buffer });
-
-                if(success.HasValue && success.Value) {
-                    IReadableGear gear = (IReadableGear) type.GetConstructors()[0].Invoke(null);
-                    gear.CompressionAlgorithm = compressionAlgorithm;
-
-                    gear.Read(buffer);
-
-                    return gear;
-                }
-            }
-
-            #endregion
-
-            return null; // If no gear can read this file.
-        }
-
-        public static bool CloseCurrentFile() {
-            if(CurrentFile is null)
+        /// <summary>
+        /// Saves a file to a specified path.
+        /// </summary>
+        /// <return>Whether the file was saved succesfully.</return>
+        public static bool SaveFile(FileInstance file, string? destination = null) {
+            if(file.Node.Contents is not IModifiableGear)
                 return false;
 
-            return CloseFile(CurrentFile);
+            destination ??= file.SavePath;
+
+            if(destination is null) // If it is still null: (SavePath is not set)
+                return false; // Change to open save dialog.
+
+            File.WriteAllBytes(destination, file.Node.Contents.Write());
+
+            return File.Exists(destination);
+        }
+
+        public static IDataGear? GetGear(string filename, byte[] contents) {
+            if(contents is null)
+                return null;
+
+            foreach(GearEntry entry in GearManager.LoadedGears) {
+                if(entry.Identify is not null && !entry.Identify(filename, contents))
+                    continue; // Go to the next gear.
+
+                switch(entry.Type) {
+                    case Type x when x.IsAssignableTo(typeof(ICompressionGear)):
+                        ICompressionGear compression = (ICompressionGear) x.GetConstructors()[0].Invoke(null);
+                        IDataGear? gear = GetGear(filename.Remove(filename.LastIndexOf('.')), compression.Decompress(contents));
+
+                        if(gear is null)
+                            return null;
+
+                        gear.CompressionAlgorithm = compression;
+
+                        return gear;
+                    case Type x when x.IsAssignableTo(typeof(IDataGear)):
+                        IReadableGear readableGear = (IReadableGear) x.GetConstructors()[0].Invoke(null);
+                        readableGear.Read(contents);
+
+                        return readableGear;
+                }
+            }
+
+            return null; // If no gear can read this file.
         }
 
         /// <summary>
         /// Closes a file from a given index from <see cref="LoadedFiles"/>
         /// </summary>
         /// <returns>Whether the file was closed successfully.</returns>
-        public static bool CloseFile(INode file) {
+        public static bool CloseFile(FileInstance? file) {
+            if(file is null) return false;
+
             // Asks the user if they want to discard the changes if applicable.
-            if(!file.Metadata?.Saved) {
-                if(Dialogs.MessageBox(
-                    Dialogs.MessageBoxButtons.YesNo,
-                    Dialogs.MessageBoxIconType.Warning,
-                    Dialogs.MessageBoxDefaultButton.CancelNo,
-                    "Unsaved changes: " + file.ID,
-                    "You have unsaved changes in this file. Do you want to discard them?")
-                    != 1) return false;
+            if(!file.Saved) {
+                DialogSystem.OpenMessageDialog(
+                    "Unsaved changes:",
+                    $"\"{file.Name}\"\n\nYou have unsaved changes in this file.\nDo you want to save them before closing it?",
+                    DialogSystem.DialogOptions.YesNoCancel,
+                    new Action[] {
+                        () => {},
+                        () => {},
+                        () => {}
+                    });
+
+                return false;
             }
 
             LoadedFiles.Remove(file);
@@ -196,85 +185,50 @@ namespace NewGear.MainMachine.FileSystem {
         }
     }
 
-    internal struct LoadedFileProperties {
+    internal class FileInstance {
+        public INode Node;
+
+        private INode? _activeFile;
+        /// <summary>
+        /// The file that was last selected.
+        /// </summary>
+        public INode? ActiveFile {
+            get { return _activeFile; }
+            set {
+                _activeFile = value;
+                ActiveFileChanged?.Invoke(value);
+            }
+        }
+
+        public event Action<INode?>? ActiveFileChanged;
+
+        /// <summary>
+        /// A list containing selected files (multiselect)
+        /// </summary>
+        public List<INode> SelectedFiles = new();
+
         /// <summary>
         /// Used to keep track of whether the file has been saved.
         /// </summary>
-        public bool Saved { get; set; } = true;
+        public bool Saved = true;
+
+        private string? _savePath;
         /// <summary>
         /// The full path of the file. Used for saving.
         /// </summary>
-        public string? SavePath { get; set; }
+        public string? SavePath {
+            get { return _savePath; }
+            set {
+                _savePath = value;
+                Name = Path.GetFileName(value);
+            }
+        }
 
-        public LoadedFileProperties(string savePath) =>
+        public string? Name { get; private set; }
+
+        public FileInstance(INode node, string savePath) {
+            Node = node;
             SavePath = savePath;
+        }
     }
-
-    //internal class LoadedFile {
-    //    /// <summary>
-    //    /// Used to keep track of whether the file has been saved.
-    //    /// </summary>
-    //    public bool Saved { get; set; } = true;
-    //    /// <summary>
-    //    /// The full path of the file. Used for saving.
-    //    /// </summary>
-    //    public string FullName { get; set; }
-    //    /// <summary>
-    //    /// The name of the file.
-    //    /// </summary>
-    //    public string Name { get; set; }
-    //    /// <summary>
-    //    /// The gear containing the contents of the file.
-    //    /// </summary>
-    //    public IDataGear Gear { get; set; }
-
-    //    public LoadedFile(string filename, IDataGear gear) {
-    //        FullName = filename;
-    //        Name = Path.GetFileName(filename);
-    //        Gear = gear;
-    //    }
-    //}
-
-    //internal class LoadedContainer : LoadedFile {
-    //    /// <summary>
-    //    /// The root node of the container.
-    //    /// </summary>
-    //    public BranchNode? RootNode { get; set; }
-    //    /// <summary>
-    //    /// The list containing all children.
-    //    /// </summary>
-    //    public List<LoadedChildFile> Children { get; set; } = new();
-    //    /// <summary>
-    //    /// Represents the selected file within the children list.
-    //    /// </summary>
-    //    public LoadedChildFile? SelectedFile { get; set; }
-
-    //    public LoadedContainer(string filename, IContainerGear gear) : base(filename, gear) {
-    //        RootNode = gear.RootNode;
-            
-    //        foreach(INode child in RootNode)
-    //            Children.Add(new(child.ID, child.Contents, FileManager.GetGear(child.Contents)));
-    //    }
-    //}
-
-    //internal class LoadedChildFile {
-    //    /// <summary>
-    //    /// The name of the child.
-    //    /// </summary>
-    //    public string Name { get; set; }
-    //    /// <summary>
-    //    /// The bytes of the file.
-    //    /// </summary>
-    //    public byte[] RawContents { get; set; }
-    //    /// <summary>
-    //    /// The gear that is generated from <see cref="RawContents"/>.
-    //    /// </summary>
-    //    public IDataGear? Gear { get; set; }
-
-    //    public LoadedChildFile(string name, byte[] rawContents, IDataGear? gear) {
-    //        Name = name;
-    //        RawContents = rawContents;
-    //        Gear = gear;
-    //    }
-    //}
 }

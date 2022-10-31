@@ -1,38 +1,76 @@
 ﻿using ImGuiNET;
-using NewGear.GearSystem.InterfaceGears;
 using NewGear.MainMachine.FileSystem;
-using NewGear.TrueTree;
+using NewGear.Trees.TrueTree;
 using System.Numerics;
 using TinyDialogsNet;
 
 namespace NewGear.MainMachine.GUI.WindowSystem.Windows {
     internal class FileTree : ImGUIWindow {
-        private static BranchNode? RootNode;
+        public FileInstance LinkedFile { get; set; }
+        private readonly BranchNode? root;
 
-        public FileTree() {
-            FileManager.FileChanged += () => {
-                // If the file can be displayed as a file tree:
-                if(FileManager.CurrentFile is BranchNode branch)
-                    RootNode = branch;
-                else
-                    RootNode = null;
-            };
+        public FileTree(FileInstance file) {
+            LinkedFile = file;
+
+            if(file.Node is BranchNode branch)
+                root = branch;
+            else
+                root = null;
         }
 
         public void Render() {
-            ImGui.SetNextWindowSize(new(500, 350), ImGuiCond.FirstUseEver);
-            ImGui.Begin("File Tree", ref MainWindow.OpenedWindows[0]);
+            ImGui.Begin("File Tree", ref WindowManager.WindowOpenedStates[(int) WindowManager.WindowType.FileTree]);
 
-            if(RootNode is null) {
-                ImGui.TextDisabled("There is nothing to show.");
+            if(root is null) {
+                ImGui.BeginDisabled();
+                ImGui.TextWrapped("There is nothing to show.");
+                ImGui.EndDisabled();
                 return;
             }
 
-            ImGui.Spacing();
+            // Main context menu -----------------
 
-            RenderChildren(RootNode);
+            //if(ImGui.BeginPopupContextItem()) {
+            //    if(ImGui.Selectable("Export All")) {
+            //        if(FileManager.CurrentFile?.Node.LinkedNode is not BranchNode branch)
+            //            return;
 
-            static void RenderChildren(BranchNode parent) {
+            //        string? result = Dialogs.SelectFolderDialog(
+            //            title: "Export all at...",
+            //            defaultPath: Directory.GetParent(FileManager.CurrentFile?.SavePath));
+
+            //        if(result is not null) {
+            //            try {
+            //                RecursiveExport(branch, result);
+            //            } catch {
+            //                Dialogs.MessageBox(
+            //                    buttons: Dialogs.MessageBoxButtons.Ok,
+            //                    iconType: Dialogs.MessageBoxIconType.Error,
+            //                    defaultButton: Dialogs.MessageBoxDefaultButton.OkYes,
+            //                    message: "The files were not exported successfully."
+            //                    );
+            //            }
+            //        }
+
+            //        void RecursiveExport(BranchNode branch, string dir) {
+            //            Directory.CreateDirectory(dir);
+
+            //            foreach(INode node in branch)
+            //                if(node is BranchNode childBranch)
+            //                    RecursiveExport(childBranch, Path.Combine(dir, node.ID));
+            //                else if(node is LeafNode leaf)
+            //                    File.WriteAllBytes(Path.Combine(dir, node.ID), leaf.Contents);
+            //        }
+            //    }
+            //}
+
+            // Render contents -------------------
+
+            //ImGui.InputText("##", )
+
+            RenderChildren(root);
+
+            void RenderChildren(BranchNode parent) {
                 foreach(INode child in parent) {
                     if(child is BranchNode branchNode) {
                         if(ImGui.TreeNodeEx(child.ID)) { // Branch node.
@@ -42,9 +80,34 @@ namespace NewGear.MainMachine.GUI.WindowSystem.Windows {
                     } else if(child is LeafNode leafNode) { // Leaf node.
                         ImGui.TreePush();
 
+                        bool popVar = false;
+
+                        unsafe {
+                            if(LinkedFile.ActiveFile == leafNode && LinkedFile.SelectedFiles.Count > 1) {
+                                Vector4 currentColor = *ImGui.GetStyleColorVec4(ImGuiCol.Header);
+
+                                currentColor.W += 0.3f;
+
+                                ImGui.PushStyleColor(ImGuiCol.Header, currentColor);
+
+                                popVar = true;
+                            }
+                        };
+
                         // When file is selected:
-                        if(ImGui.Selectable(leafNode.ID, FileManager.SelectedFile == leafNode))
-                            FileManager.SelectedFile = leafNode;
+                        if(ImGui.Selectable(leafNode.ID, LinkedFile.SelectedFiles.Contains(leafNode))) {
+                            // Multiselect
+                            if(!ImGui.GetIO().KeyCtrl)
+                                LinkedFile.SelectedFiles.Clear();
+
+                            if(!LinkedFile.SelectedFiles.Contains(leafNode))
+                                LinkedFile.SelectedFiles.Add(leafNode);
+
+                            LinkedFile.ActiveFile = leafNode;
+                        }
+
+                        if(popVar)
+                            ImGui.PopStyleColor();
 
                         // Context Menu (for files)
                         if(ImGui.BeginPopupContextItem()) {
@@ -87,8 +150,8 @@ namespace NewGear.MainMachine.GUI.WindowSystem.Windows {
                                             );
                                     }
 
-                                    if(FileManager.CurrentFile is not null && FileManager.CurrentFile.Metadata is not null)
-                                        FileManager.CurrentFile.Metadata.Saved = false;
+                                    if(FileManager.CurrentFile is not null)
+                                        FileManager.CurrentFile.Saved = false;
                                 }
                             }
 

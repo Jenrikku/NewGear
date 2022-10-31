@@ -2,81 +2,95 @@
 using NewGear.MainMachine.FileSystem;
 using NewGear.MainMachine.GUI.WindowSystem;
 using Raylib_cs;
+using rlImGui_cs;
+using System.Text;
 
 using static NewGear.MainMachine.GUI.Constants;
-using static Raylib_cs.Raylib;
-using static ImGuiNET.ImGui;
 
 namespace NewGear.MainMachine.GUI {
     internal static partial class MainWindow {
-        internal static ImguiController Controller = new();
-        internal static RenderTexture2D ViewportTexture = LoadRenderTexture(1, 1);
-        internal static bool[] OpenedWindows = new bool[3];
-
+        internal static RenderTexture2D ViewportTexture = Raylib.LoadRenderTexture(1, 1);
+        
         internal static unsafe void Start() {
-            SetTraceLogCallback(&Logging.LogConsole);
-            SetConfigFlags(ConfigFlags.FLAG_MSAA_4X_HINT | ConfigFlags.FLAG_VSYNC_HINT | ConfigFlags.FLAG_WINDOW_RESIZABLE);
-            InitWindow(MAIN_WINDOW_WIDTH, MAIN_WINDOW_HEIGHT, "New Gear | Alpha");
-            SetWindowIcon(LoadImage("icon.png"));
-            SetExitKey(KeyboardKey.KEY_NULL);
-            SetTargetFPS(60);
+            Raylib.SetTraceLogCallback(&Logging.LogConsole);
+            Raylib.SetConfigFlags(ConfigFlags.FLAG_MSAA_4X_HINT | ConfigFlags.FLAG_VSYNC_HINT | ConfigFlags.FLAG_WINDOW_RESIZABLE);
+            Raylib.InitWindow(MAIN_WINDOW_WIDTH, MAIN_WINDOW_HEIGHT, "New Gear | Alpha");
+            Raylib.SetExitKey(KeyboardKey.KEY_NULL);
+            Raylib.SetTargetFPS(60);
 
             // Dark mode support (Windows 10+):
-            InitColorMode((nint) GetWindowHandle());
+            InitColorMode((nint) Raylib.GetWindowHandle());
 
-            Controller.Load(MAIN_WINDOW_WIDTH, MAIN_WINDOW_HEIGHT);
+            rlImGui.Setup();
 
-            GetIO().ConfigFlags |= ImGuiConfigFlags.DockingEnable;
+            ImGui.GetIO().ConfigFlags |= ImGuiConfigFlags.DockingEnable;
 
             // To be replaced in the future with theming:
-            GetStyle().Colors[(int) ImGuiCol.WindowBg] = IMGUI_WINDOW_BACKGROUND;
-            GetStyle().Colors[(int) ImGuiCol.DockingEmptyBg] = IMGUI_DOCKSPACE_BACKGROUND;
+            ImGui.GetStyle().Colors[(int) ImGuiCol.WindowBg] = IMGUI_WINDOW_BACKGROUND;
+            ImGui.GetStyle().Colors[(int) ImGuiCol.DockingEmptyBg] = IMGUI_DOCKSPACE_BACKGROUND;
 
-            // Default windows (will be replaced with configuration file later)
-            OpenedWindows[0] = true;  // File Tree
-            OpenedWindows[1] = false; // Viewport
-            OpenedWindows[2] = false; // Hex Editor
+            WindowManager.Initialize();
 
             abortExit: // Label used for when the files have not been closed properly. (Not saved)
-            while(!WindowShouldClose()) {
-                // Feed the input events to our ImGui Controller, which passes them through to ImGui.
-                Controller.Update(GetFrameTime());
+            while(!Raylib.WindowShouldClose()) {
+                Raylib.BeginDrawing();
+
+                Raylib.ClearBackground(MAIN_WINDOW_BACKGROUND);
+                rlImGui.Begin();
+
+                DialogSystem.RenderMessages();
+                DialogSystem.RenderFileSelectDialog();
+                DialogSystem.RenderBasicInputDialogs();
 
                 // File drag and drop
-                if(IsFileDropped()) {
-                    FileManager.OpenFiles(GetDroppedFiles());
-                    ClearDroppedFiles();
+                if(Raylib.IsFileDropped()) {
+                    FilePathList droppedFiles = Raylib.LoadDroppedFiles();
+
+                    string[] paths = new string[droppedFiles.count];
+
+                    for(uint i = 0; i < droppedFiles.count; i++) {
+                        byte* startpos = droppedFiles.paths[i];
+                        byte* pos = startpos;
+                        int length = 0;
+
+                        while(*pos++ != 0)
+                            length++;
+
+                        paths[i] = Encoding.Default.GetString(startpos, length);
+                    }
+
+                    Raylib.UnloadDroppedFiles(droppedFiles);
+
+                    FileDroppedAction?.Invoke(paths);
                 }
 
+                ImGui.SetNextWindowPos(ImGui.GetMainViewport().GetCenter(), ImGuiCond.Always, new(0.5f, 0.5f));
+
                 // Placeholder window (to prevent "Debug")
-                Begin(string.Empty, 
+                ImGui.Begin(string.Empty, 
                     ImGuiWindowFlags.NoInputs |
                     ImGuiWindowFlags.NoDecoration |
                     ImGuiWindowFlags.NoBackground |
                     ImGuiWindowFlags.NoFocusOnAppearing |
                     ImGuiWindowFlags.NoBringToFrontOnFocus |
-                    ImGuiWindowFlags.NoSavedSettings);
+                    ImGuiWindowFlags.NoSavedSettings |
+                    ImGuiWindowFlags.AlwaysAutoResize);
 
                 if(RenderMainMenuBar())
                     break; // Go to dispose.
 
-                End();
+                if(FileManager.LoadedFiles.Count <= 0)
+                    ImGui.TextDisabled("Drop a file here or open it.");
 
-                #region Windows
+                ImGui.End();
 
-                DockSpaceOverViewport();
-                WindowManager.RenderActiveWindows();
+                if(FileManager.LoadedFiles.Count > 0) {
+                    ImGui.DockSpaceOverViewport();
+                    WindowManager.RenderActiveWindows();
+                }
 
-                #endregion
-
-                // Draw:
-
-                BeginDrawing();
-
-                ClearBackground(MAIN_WINDOW_BACKGROUND);
-                Controller.Draw();
-
-                EndDrawing();
+                rlImGui.End();
+                Raylib.EndDrawing();
             }
 
             // Disposing:
@@ -87,10 +101,10 @@ namespace NewGear.MainMachine.GUI {
                 if(!FileManager.CloseFile(FileManager.LoadedFiles.ElementAt(i)))
                     goto abortExit; // If not all files were closed, abort exit.
 
-            UnloadRenderTexture(ViewportTexture);
+            Raylib.UnloadRenderTexture(ViewportTexture);
 
-            Controller.Dispose();
-            CloseWindow();
+            rlImGui.Shutdown();
+            Raylib.CloseWindow();
         }
     }
 }
