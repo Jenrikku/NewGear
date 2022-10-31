@@ -1,4 +1,4 @@
-﻿using NewGear.GearSystem.InterfaceGears;
+﻿using NewGear.GearSystem.Interfaces;
 using Syroot.BinaryData;
 using System.Collections;
 using System.Runtime.InteropServices;
@@ -10,10 +10,6 @@ namespace NewGear.Gears.Compression {
     public class Yaz0 : ICompressionGear {
         public byte? Level { get; set; } = 5;
         public byte[]? Reserved { get; set; }
-
-        public static bool Identify(byte[] data) {
-            return Encoding.ASCII.GetString(data[0..4]) == "Yaz0";
-        }
 
         public unsafe byte[] Compress(byte[] data) {
             int maxBackLevel = Level is null ? 256 : (int) (0x10e0 * (Level / 9.0) - 0x0e0);
